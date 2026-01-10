@@ -20,15 +20,21 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
+    - name: List all files
+      run: |
+        # 列出所有文件以确认
+        Write-Host "📁 Repository files:"
+        Get-ChildItem -Recurse -File | Select-Object Name, Length
+
     - name: Check for executable
       run: |
-        # 检查实时打字翻译.exe是否存在（应该已提交到仓库）
-        if (Test-Path "实时打字翻译.exe") {
-          Write-Host "✅ Found 实时打字翻译.exe"
-          Get-Item "实时打字翻译.exe" | Select-Object Name, Length, LastWriteTime
+        # 检查exe文件（使用通配符处理中文文件名）
+        $exeFiles = Get-ChildItem -Filter "*.exe" -File
+        if ($exeFiles) {
+          Write-Host "✅ Found executable files:"
+          $exeFiles | ForEach-Object { Write-Host "  - $($_.Name) ($([math]::Round($_.Length/1MB, 2)) MB)" }
         } else {
-          Write-Host "⚠️ 实时打字翻译.exe not found in repository"
-          Write-Host "Please compile it once using Ahk2Exe and commit to the repository"
+          Write-Host "⚠️ No exe files found in repository"
           exit 1
         }
 
@@ -37,10 +43,25 @@ jobs:
         # 创建发布目录
         New-Item -ItemType Directory -Force -Path "dist"
 
-        # 复制主程序（.exe 和 .ahk）
-        # .exe 是编译好的解释器，.ahk 是源代码
-        Copy-Item "实时打字翻译.exe" -Destination "dist/"
-        Copy-Item "实时打字翻译.ahk" -Destination "dist/"
+        # 复制主程序（使用通配符匹配中文名称）
+        $mainExe = Get-ChildItem -Filter "实时打字翻译.exe" -File
+        $mainAhk = Get-ChildItem -Filter "实时打字翻译.ahk" -File
+
+        if ($mainExe) {
+          Copy-Item $mainExe -Destination "dist/"
+          Write-Host "✅ Copied: $($mainExe.Name)"
+        } else {
+          Write-Host "⚠️ exe file not found"
+          exit 1
+        }
+
+        if ($mainAhk) {
+          Copy-Item $mainAhk -Destination "dist/"
+          Write-Host "✅ Copied: $($mainAhk.Name)"
+        } else {
+          Write-Host "⚠️ ahk file not found"
+          exit 1
+        }
 
         # 复制配置示例
         Copy-Item "config.example.json" -Destination "dist/"
@@ -52,6 +73,7 @@ jobs:
         New-Item -ItemType Directory -Force -Path "dist/lib"
         Copy-Item -Path "lib/*.ahk" -Destination "dist/lib/" -Recurse
         if (Test-Path "lib/dll_64") {
+          New-Item -ItemType Directory -Force -Path "dist/lib/dll_64"
           Copy-Item -Path "lib/dll_64/*" -Destination "dist/lib/dll_64/" -Recurse
         }
 
