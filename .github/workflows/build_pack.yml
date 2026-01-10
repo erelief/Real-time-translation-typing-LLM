@@ -23,32 +23,15 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
-    - name: Install AutoHotkey
+    - name: Check for executable
       run: |
-        # 下载 AutoHotkey v2.0
-        curl -L -o AHK-Installer.exe "https://www.autohotkey.com/download/ahk-install.exe"
-        # 静默安装
-        Start-Process -Wait -FilePath "AHK-Installer.exe" -ArgumentList "/S", "/v", "/qn"
-
-    - name: Download Ahk2Exe
-      run: |
-        # 下载 Ahk2Exe 编译器
-        $url = "https://www.autohotkey.com/download/ahk2exe.exe"
-        curl -L -o Ahk2Exe.exe $url
-
-    - name: Compile AHK script
-      run: |
-        # 使用 Ahk2Exe 编译（如果安装成功，直接调用）
-        # 备用方案：直接使用已下载的 Ahk2Exe.exe
-        .\Ahk2Exe.exe /silent /in "实时打字翻译.ahk" /icon "ICON.ico" /out "实时打字翻译.exe" || echo "Compile may have failed, checking for output..."
-
-    - name: Check compiled file
-      run: |
+        # 检查实时打字翻译.exe是否存在（应该已提交到仓库）
         if (Test-Path "实时打字翻译.exe") {
-          Write-Host "✅ Compilation successful!"
+          Write-Host "✅ Found 实时打字翻译.exe"
           Get-Item "实时打字翻译.exe" | Select-Object Name, Length, LastWriteTime
         } else {
-          Write-Host "⚠️ Compilation failed or exe not found"
+          Write-Host "⚠️ 实时打字翻译.exe not found in repository"
+          Write-Host "Please compile it once using Ahk2Exe and commit to the repository"
           exit 1
         }
 
@@ -57,8 +40,10 @@ jobs:
         # 创建发布目录
         New-Item -ItemType Directory -Force -Path "dist"
 
-        # 复制主程序
+        # 复制主程序（.exe 和 .ahk）
+        # .exe 是编译好的解释器，.ahk 是源代码
         Copy-Item "实时打字翻译.exe" -Destination "dist/"
+        Copy-Item "实时打字翻译.ahk" -Destination "dist/"
 
         # 复制配置示例
         Copy-Item "config.example.json" -Destination "dist/"
@@ -66,9 +51,12 @@ jobs:
         # 复制 README
         Copy-Item "README.md" -Destination "dist/"
 
-        # 复制必需的 DLL 文件（64位）
+        # 复制必需的 lib 文件
         New-Item -ItemType Directory -Force -Path "dist/lib"
-        Copy-Item -Path "lib/dll_64/*" -Destination "dist/lib/" -Recurse
+        Copy-Item -Path "lib/*.ahk" -Destination "dist/lib/" -Recurse
+        if (Test-Path "lib/dll_64") {
+          Copy-Item -Path "lib/dll_64/*" -Destination "dist/lib/dll_64/" -Recurse
+        }
 
         # 复制 images 文件夹（如果存在）
         if (Test-Path "images") {
