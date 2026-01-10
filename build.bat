@@ -1,1 +1,0 @@
-Ahk2Exe.exe /silent /in "实时打字翻译.ahk" /icon ICON.ico /base AutoHotkey.exe
