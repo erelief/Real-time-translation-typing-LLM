@@ -1,27 +1,16 @@
-# This workflow uses actions that are not certified by GitHub.
-# They are provided by a third-party and are governed by
-# separate terms of service, privacy policy, and support
-# documentation.
-
-name: BuildExecutable
+name: Build and Package
 
 on:
   push:
     branches:
-      - '*'
+      - main
+      - master
   pull_request:
     branches:
-      - '*'
-
-
-env:
-  # Path to the solution file relative to the root of the project.
-  SOLUTION_FILE_PATH: .
-
-  # Configuration type to build.
-  # You can convert this to a build matrix if you need coverage of multiple configuration types.
-  # https://docs.github.com/actions/learn-github-actions/managing-complex-workflows#using-a-build-matrix
-  BUILD_CONFIGURATION: Release
+      - main
+      - master
+  release:
+    types: [created]
 
 permissions:
   contents: read
@@ -31,35 +20,102 @@ jobs:
     runs-on: windows-latest
 
     steps:
-    - uses: actions/checkout@v4
+    - name: Checkout code
+      uses: actions/checkout@v4
 
-    - name: Package
+    - name: Install AutoHotkey
       run: |
-        ./build.bat
-        
-        mkdir distWeb/
-        mkdir distWeb/lib
-        cp "实时打字翻译 -网页版(推荐).exe" distWeb/
-        cp -r lib/64bit distWeb/lib/
-        cp -r lib/32bit distWeb/lib/
-        cp -r lib/dll_64 distWeb/lib/
+        # 下载 AutoHotkey v2.0
+        curl -L -o AHK-Installer.exe "https://www.autohotkey.com/download/ahk-install.exe"
+        # 静默安装
+        Start-Process -Wait -FilePath "AHK-Installer.exe" -ArgumentList "/S", "/v", "/qn"
 
-        mkdir distAPI/
-        cp "实时打字翻译-API.exe" distAPI/
-        cp ./thread.ah2 distAPI/ # No default value. -r./thread.ah2 is regarded as a common file
-        cp -r ./config distAPI/ # To copy the folder, you need to add the -r parameter
-        cp -r ./lib distAPI/ # For top-level directories, you need to pass "." to specify the current directory
-        
-    - name: Upload a Build Artifact
-      uses: actions/upload-artifact@v4.3.1
+    - name: Download Ahk2Exe
+      run: |
+        # 下载 Ahk2Exe 编译器
+        $url = "https://www.autohotkey.com/download/ahk2exe.exe"
+        curl -L -o Ahk2Exe.exe $url
+
+    - name: Compile AHK script
+      run: |
+        # 使用 Ahk2Exe 编译（如果安装成功，直接调用）
+        # 备用方案：直接使用已下载的 Ahk2Exe.exe
+        .\Ahk2Exe.exe /silent /in "实时打字翻译.ahk" /icon "ICON.ico" /out "实时打字翻译.exe" || echo "Compile may have failed, checking for output..."
+
+    - name: Check compiled file
+      run: |
+        if (Test-Path "实时打字翻译.exe") {
+          Write-Host "✅ Compilation successful!"
+          Get-Item "实时打字翻译.exe" | Select-Object Name, Length, LastWriteTime
+        } else {
+          Write-Host "⚠️ Compilation failed or exe not found"
+          exit 1
+        }
+
+    - name: Create distribution package
+      run: |
+        # 创建发布目录
+        New-Item -ItemType Directory -Force -Path "dist"
+
+        # 复制主程序
+        Copy-Item "实时打字翻译.exe" -Destination "dist/"
+
+        # 复制配置示例
+        Copy-Item "config.example.json" -Destination "dist/"
+
+        # 复制 README
+        Copy-Item "README.md" -Destination "dist/"
+
+        # 复制必需的 DLL 文件（64位）
+        New-Item -ItemType Directory -Force -Path "dist/lib"
+        Copy-Item -Path "lib/dll_64/*" -Destination "dist/lib/" -Recurse
+
+        # 复制 images 文件夹（如果存在）
+        if (Test-Path "images") {
+          Copy-Item -Path "images/*" -Destination "dist/" -Recurse
+        }
+
+        # 列出打包内容
+        Write-Host "📦 Package contents:"
+        Get-ChildItem -Path "dist" -Recurse | Select-Object FullName, Length
+
+    - name: Create ZIP archive
+      run: |
+        # 创建发布用的 ZIP 文件
+        Compress-Archive -Path "dist/*" -DestinationPath "Real-time-translation-typing.zip"
+
+        Write-Host "📦 Archive created:"
+        Get-Item "Real-time-translation-typing.zip" | Select-Object Name, Length
+
+    - name: Upload build artifact
+      uses: actions/upload-artifact@v4
       with:
-        name: Real-time-translation-typing-WEB
-        path: distWeb/
+        name: Real-time-translation-typing
+        path: dist/
 
-    - name: Upload a Build Artifact
-      uses: actions/upload-artifact@v4.3.1
+    - name: Upload ZIP artifact
+      uses: actions/upload-artifact@v4
       with:
-        name: Real-time-translation-typing-API
-        path: distAPI/
+        name: Real-time-translation-typing-zip
+        path: Real-time-translation-typing.zip
 
-    
+  # 仅在 release 时自动发布
+  release:
+    needs: build
+    runs-on: windows-latest
+    if: github.event_name == 'release'
+    permissions:
+      contents: write
+
+    steps:
+    - name: Download artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: Real-time-translation-typing-zip
+
+    - name: Upload release asset
+      uses: softprops/action-gh-release@v1
+      with:
+        files: Real-time-translation-typing.zip
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

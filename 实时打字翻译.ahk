@@ -1,13 +1,11 @@
-#Requires AutoHotkey v2+
+#Requires AutoHotkey v2.0
 #include <Direct2DRender>
 #include <zmq>
 #include <log>
-#include <WebView2>
 #include <ComVar>
 #include <btt>
 #include <WinHttpRequest>
-#include ./utility/网页翻译集合.ah2
-#include ./utility/sound.ah2
+#include <LLM_Translator>
 #include ./utility/lol_game.ah2
 
 logger.is_log_open := false
@@ -22,20 +20,73 @@ OnMessage(WM_IME_CHAR := 0x0286, ON_MESSAGE_WM_IME_CHAR)
 OnMessage(0x0100, ON_WM_KEYDOWN)  ; 0x0100 是 WM_KEYDOWN
 ;OnMessage(0x0101, ON_WM_KEYUP)    ; 0x0101 是 WM_KEYUP
 
+; 获取当前服务的显示名称（优先使用 display_name，否则使用配置名）
+get_current_service_display_name()
+{
+    global g_config, g_current_api
+    api_config := g_config[g_current_api]
+    return api_config.Has("display_name") ? api_config["display_name"] : g_current_api
+}
+
+; ESC 退出翻译器（等待按键释放，避免按键传递给其他窗口）
+close_translator(*)
+{
+    g_eb.hide()
+    KeyWait("Esc")  ; 等待 ESC 释放，阻止按键传递
+}
+
 main()
 main()
 {
     btt('加载中。。。',0, 0,,OwnzztooltipStyle1,{Transparent:180,DistanceBetweenMouseXAndToolTip:-100,DistanceBetweenMouseYAndToolTip:-20})
-    ;global g_all_api := ['youdao', 'sougou', 'deepl', 'baidu']
-    global g_all_api := ['sougou', 'deepl']
+
+    ; 自动检测并创建配置文件
+    config_path := A_ScriptDir "\config.json"
+    example_config_path := A_ScriptDir "\config.example.json"
+    if !FileExist(config_path)
+    {
+        if FileExist(example_config_path)
+        {
+            FileCopy(example_config_path, config_path, 1)
+            btt('已自动创建配置文件：' config_path '`n请编辑填入你的API密钥',0, 0,5000,OwnzztooltipStyle1,{Transparent:180,DistanceBetweenMouseXAndToolTip:-100,DistanceBetweenMouseYAndToolTip:-20})
+            Sleep(1000)
+        }
+        else
+        {
+            MsgBox('错误：找不到配置文件模板 ' example_config_path)
+            ExitApp
+        }
+    }
+
+    ; 加载配置
+    global g_config := Map()
+    loadconfig(&g_config, config_path)
+
+    ; 初始化API列表
+    global g_all_api := g_config["all_api"]
+    global g_current_api := g_config["cd"]
+    global g_target_lang := g_config.Has("target_lang") ? g_config["target_lang"] : "en"
+    global g_translators := Map()  ; 存储所有LLM实例
+
+    ; 初始化所有启用的LLM翻译器
+    for api_name in g_all_api
+    {
+        api_config := g_config[api_name]
+        if (api_config["is_open"] && api_config["api_key"])
+        {
+            ; 所有平台使用同一个类，只是配置不同！
+            g_translators[api_name] := OpenAI_Compat_LLM(
+                api_name,
+                api_config,
+                ObjBindMethod(Edit_box, "on_change_stub")
+            )
+        }
+    }
+
     global g_eb := Edit_box(0, 0, 1000, 100)
-    global g_sound := SoundINput(A_ScriptDir '\lib\语音.html')
-    global g_is_sound_mode := false
-    g_sound.set_out_change_call_back(sound_call_back)
     global g_is_ime_char := false
     global g_cursor_x := 0
     global g_cursor_y := 0
-    global g_current_api := g_all_api[1]
     global g_window_hwnd := 0
     global g_is_input_mode := true
     global g_lol_api := Lcu()
@@ -52,20 +103,19 @@ main()
     g_eb.hide()
 
 	HotIfWinExist("ahk_class RiotWindowClass")
-        Hotkey('XButton1', (key) => input_sound()) ;打开翻译器
+        Hotkey('XButton1', (key) => fanyi()) ;打开翻译器
         Hotkey('XButton2', (key) => send_command('Primitive')) ;打开翻译器
         Hotkey('!XButton2', (key) => (g_eb.text := '/all ' g_eb.text, send_command('Primitive'))) ;打开翻译器
         Hotkey('^XButton2', (key) => (g_eb.text := '/all ' g_eb.text, g_eb.fanyi_result := '/all ' g_eb.fanyi_result, send_command(''))) ;打开翻译器
         Hotkey('+XButton2', (key) => send_command('')) ;打开翻译器
         Hotkey('^f8', (key) => switch_lol_send_mode())
     HotIf()
-    Hotkey('!i', (key) => input_sound()) ;打开翻译器
     Hotkey('!y', (key) => fanyi()) ;打开翻译器
     Hotkey('^!y', (key) => fanyi_clipboard()) ;翻译粘贴板文本
     Hotkey('^f7', (key) => g_eb.debug()) ;调试
-    Hotkey('~Esc', (key) => g_eb.hide()) ;退出
+    Hotkey('!l', (key) => change_target_language()) ;切换目标语言
+    Hotkey('~Esc', close_translator) ;退出
 	HotIfWinExist("ahk_id " g_eb.ui.hwnd)
-        Hotkey("!enter", sound_play) ;发音
         Hotkey("enter", (key) => send_command('translate')) ;发送文本
         Hotkey("^enter", (key) => send_command('Primitive')) ;发送原始文本
         Hotkey("~tab", tab_send) ;切换API
@@ -78,22 +128,15 @@ main()
     help_text := '
     (
         欢迎使用实时打字翻译工具
-        ALT Y : 打开(键盘输入)
-        ALT I : 打开(语音输入)
+        ALT Y : 打开翻译器
+        ALT L : 修改目标语言
         ENTER : 发送结果
         CTRL ENTER : 发送原始文本
-        ALT ENTER : 发音
-        CTRL F7 : 展示当前API网页原始内容
+        CTRL F7 : 展示当前API配置
+        TAB : 切换API服务
         ESC : 退出
     )'
     btt(help_text,0, 0,,OwnzztooltipStyle1,{Transparent:180,DistanceBetweenMouseXAndToolTip:-100,DistanceBetweenMouseYAndToolTip:-20})
-}
-
-sound_call_back(name, text)
-{
-    logger.info(name, text)
-    g_eb.set_text(text)
-    g_eb.draw()
 }
 
 fanyi_clipboard(*)
@@ -101,6 +144,37 @@ fanyi_clipboard(*)
     fanyi()
     g_eb.text := A_Clipboard
     g_eb.draw()
+}
+
+change_target_language(*)
+{
+    global g_target_lang, g_config
+
+    ; 获取鼠标位置用于显示tooltip
+    MouseGetPos(&x, &y)
+
+    ; 显示当前语言提示
+    btt('当前目标语言: ' g_target_lang '`n请输入新的目标语言', x, y,,OwnzztooltipStyle1,{Transparent:180,DistanceBetweenMouseXAndToolTip:-100,DistanceBetweenMouseYAndToolTip:-20})
+
+    ; 弹出输入框让用户输入新语言
+    ib := InputBox('当前目标语言: ' g_target_lang, '设置目标语言', , 'English')
+
+    if (ib.Result == "OK")
+    {
+        new_lang := ib.Value
+        if (new_lang != "")
+        {
+            g_target_lang := new_lang
+            g_config["target_lang"] := new_lang
+
+            ; 保存到配置文件
+            saveconfig(g_config, A_ScriptDir "\config.json")
+
+            ; 显示确认提示
+            btt('已切换到: ' g_target_lang, x, y,,OwnzztooltipStyle1,{Transparent:180,DistanceBetweenMouseXAndToolTip:-100,DistanceBetweenMouseYAndToolTip:-20})
+            logger.info('目标语言已切换到: ' g_target_lang)
+        }
+    }
 }
 
 
@@ -148,22 +222,6 @@ paste(*)
     g_eb.draw()
 }
 
-sound_play(*)
-{
-    data := g_eb.fanyi_result
-    is_hz := RegExMatch(data, "\p{Han}")
-    data := EncodeDecodeURI(data)
-    if(!is_hz)
-    {
-        PlayMedia('https://dict.youdao.com/dictvoice?audio=' data)
-        logger.info('https://dict.youdao.com/dictvoice?audio=' data)
-    }
-    else
-    {
-        PlayMedia('https://api.oick.cn/txt/apiz.php?text=' data '&spd=10')
-        logger.info('https://api.oick.cn/txt/apiz.php?text=' data '&spd=10')
-    }
-}
 switch_lol_send_mode(p*)
 {
     global g_is_input_mode
@@ -247,47 +305,10 @@ tab_send(*)
     if(current_index > g_all_api.Length)
         current_index := 1
     g_current_api := g_all_api[current_index]
-    logger.info('=========' g_current_api)
-    btt('[' g_current_api ']',g_cursor_x, g_cursor_y - 45,,OwnzztooltipStyle1,{Transparent:180,DistanceBetweenMouseXAndToolTip:-100,DistanceBetweenMouseYAndToolTip:-20})
+    display_name := get_current_service_display_name()
+    logger.info('=========' display_name)
+    btt('[' display_name ']', Integer(g_cursor_x), Integer(g_cursor_y) - 45,,OwnzztooltipStyle1,{Transparent:180,DistanceBetweenMouseXAndToolTip:-100,DistanceBetweenMouseYAndToolTip:-20})
     g_eb.draw('tab')
-}
-
-input_sound(*)
-{
-    global g_cursor_x
-    global g_cursor_y
-    global g_window_hwnd
-    global g_is_sound_mode
-
-    g_is_sound_mode := true
-    
-    if(WinActive('ahk_class RiotWindowClass'))
-    {
-        g_window_hwnd := WinExist("A")
-        x := A_ScreenWidth / 2, y:= A_ScreenHeight / 2
-    }
-    else
-    {
-        if(!(g_window_hwnd := GetCaretPosEx(&x, &y, &w, &h)))
-        {
-            g_window_hwnd := WinExist("A")
-            MouseGetPos(&x, &y)
-        }
-    }
-
-    g_cursor_x := Integer(x)
-    g_cursor_y := Integer(y)
-    g_eb.show(x, y)
-    btt('[' g_current_api ']',g_cursor_x, g_cursor_y - 45,,OwnzztooltipStyle1,{Transparent:180,DistanceBetweenMouseXAndToolTip:-100,DistanceBetweenMouseYAndToolTip:-20})
-
-    js := "
-    (
-        document.querySelector("#final").innerHTML = '';
-        speechRecognition.start();
-    )"
-    g_sound.start()
-
-    g_eb.draw()
 }
 
 fanyi(*)
@@ -303,7 +324,8 @@ fanyi(*)
     g_cursor_x := x
     g_cursor_y := y
     g_eb.show(x, y)
-    btt('[' g_current_api ']',g_cursor_x, g_cursor_y - 45,,OwnzztooltipStyle1,{Transparent:180,DistanceBetweenMouseXAndToolTip:-100,DistanceBetweenMouseYAndToolTip:-20})
+    display_name := get_current_service_display_name()
+    btt('[' display_name ']', Integer(g_cursor_x), Integer(g_cursor_y) - 45,,OwnzztooltipStyle1,{Transparent:180,DistanceBetweenMouseXAndToolTip:-100,DistanceBetweenMouseYAndToolTip:-20})
     g_eb.draw()
 }
 ON_WM_KEYDOWN(a*)
@@ -332,7 +354,7 @@ ON_MESSAGE_WM_IME_CHAR(a*)
 
 class Edit_box
 {
-    __New(x, y, w, h) 
+    __New(x, y, w, h)
     {
         this.x := 0
         this.y := 0
@@ -343,70 +365,39 @@ class Edit_box
         this.fanyi_result := ''
         this.insert_pos := 0 ;距离txt最后边的距离
 
-        if(this.has_key('sougou'))
-        {
-            this.sg := sg := Sougou_web_cd()
-            sg.set_out_change_call_back(this.on_change.bind(this))
-            sg.set_input_box('我来自搜狗')
-        }
-
-        if(this.has_key('youdao'))
-        {
-            this.yd := yd := Youdao_web_cd()
-            yd.set_out_change_call_back(this.on_change.bind(this))
-            yd.set_input_box('我来自有道')
-        }
-
-        if(this.has_key('baidu'))
-        {
-            this.bd := bd := Baidu_web_cd()
-            bd.set_out_change_call_back(this.on_change.bind(this))
-            bd.set_input_box('我来自百度')
-        }
-
-        if(this.has_key('deepl'))
-        {
-            this.dp := dp := Deepl_web_cd()
-            dp.set_out_change_call_back(this.on_change.bind(this))
-            dp.set_input_box('我来自Deepl')
-        }
+        ; 防抖机制相关
+        this.debounce_timer := 0
+        this.debounce_delay := 500  ; 停止输入500ms后触发翻译
 
         this.show_status := false
     }
-    has_key(key)
+
+    ; 静态回调方法
+    static on_change_stub(name, text)
     {
-        global g_all_api
-        for k,v in g_all_api
-        {
-            if(v = key)
-                return true
-        }
-        return false
+        global g_eb
+        if g_eb
+            g_eb.on_change(name, text)
     }
     debug()
     {
+        ; 显示当前LLM配置信息
+        global g_config, g_current_api, g_target_lang
         try
         {
-            switch(g_current_api)
-            {
-                case 'baidu':
-                {
-                    this.bd.show(,, 1000, 700)
-                }
-                case 'sougou':
-                {
-                    this.sg.show(,, 1000, 700)
-                }
-                case 'youdao':
-                {
-                    this.yd.show(,, 1000, 700)
-                }
-                case 'deepl':
-                {
-                    this.dp.show(,, 1000, 700)
-                }
-            }
-            ;g_sound.show()
+            api_info := g_config[g_current_api]
+            MsgBox(
+                "当前服务: " g_current_api "`n"
+                "模型: " api_info["model"] "`n"
+                "API地址: " api_info["base_url"] "`n"
+                "目标语言: " g_target_lang "`n"
+                "实时翻译: " (api_info["is_real_time_translate"] ? "启用" : "禁用") "`n`n"
+                "按 ALT L 可修改目标语言"
+            )
+        }
+        catch as e
+        {
+            logger.err(e.Message)
         }
     }
     on_change(cd ,text)
@@ -417,28 +408,22 @@ class Edit_box
         {
             this.fanyi_result := text
             this.ui.gui.GetPos(&x, &y, &w, &h)
-            btt(cd ':' text,x, y - 45,,OwnzztooltipStyle1,{Transparent:180,DistanceBetweenMouseXAndToolTip:-100,DistanceBetweenMouseYAndToolTip:-20})
+            display_name := get_current_service_display_name()
+            btt(display_name ':' text, Integer(x), Integer(y) - 45,,OwnzztooltipStyle1,{Transparent:180,DistanceBetweenMouseXAndToolTip:-100,DistanceBetweenMouseYAndToolTip:-20})
         }
     }
     show(x := 0, y := 0)
     {
-        if(g_is_sound_mode)
-            this.ui.gui.show('x' x ' y' y ' NA')
-        else
-            this.ui.gui.show('x' x ' y' y)
+        this.ui.gui.show('x' x ' y' y)
         this.show_status := true
     }
     hide()
     {
-        global g_is_sound_mode
         global g_is_ime_char
         this.clear()
         this.ui.gui.hide()
         g_is_ime_char := false
         this.show_status := false
-        if(g_is_sound_mode)
-            g_sound.stop()
-        g_is_sound_mode := false
         OwnzztooltipEnd()
     }
     move(x, y, w := 0, h := 0)
@@ -447,7 +432,7 @@ class Edit_box
     }
     draw(flag := 0)
     {
-        global g_current_api
+        global g_current_api, g_translators, g_config
         ui := this.ui
         ui.gui.GetPos(&x, &y, &w, &h)
         logger.info(x, y, w, h)
@@ -465,47 +450,32 @@ class Edit_box
             logger.err(this.text)
             ui.EndDraw()
         }
+
+        ; 使用LLM翻译
         input_text := this.text
-        if(flag = 'tab')
+        api_config := g_config[g_current_api]
+
+        ; 检查是否启用实时翻译
+        if (api_config["is_real_time_translate"] && input_text != "")
         {
-            switch(g_current_api)
-            {
-                case 'baidu':
-                {
-                    this.bd.set_input_box('')
-                }
-                case 'sougou':
-                {
-                    this.sg.set_input_box('')
-                }
-                case 'youdao':
-                {
-                    this.yd.set_input_box('')
-                }
-                case 'deepl':
-                {
-                    this.dp.set_input_box('')
-                }
-            }
+            ; 防抖处理：取消之前的定时器，重新计时
+            if (this.debounce_timer)
+                SetTimer(this.debounce_timer, 0)
+
+            this.debounce_timer := SetTimer(() => this.trigger_translate(), -this.debounce_delay)
         }
-        switch(g_current_api)
+    }
+
+    ; 触发翻译
+    trigger_translate()
+    {
+        global g_translators, g_current_api, g_target_lang
+        input_text := this.text
+        if (input_text != "" && g_translators.Has(g_current_api))
         {
-            case 'baidu':
-            {
-                this.bd.set_input_box(input_text)
-            }
-            case 'sougou':
-            {
-                this.sg.set_input_box(input_text)
-            }
-            case 'youdao':
-            {
-                this.yd.set_input_box(input_text)
-            }
-            case 'deepl':
-            {
-                this.dp.set_input_box(input_text)
-            }
+            ; 设置回调为当前实例
+            g_translators[g_current_api].set_callback(this.on_change.bind(this))
+            g_translators[g_current_api].translate(input_text, g_target_lang)
         }
     }
     clear()
@@ -706,7 +676,7 @@ GetCaretPosEx(&x?, &y?, &w?, &h?)
 ;by tebayaki
 ;PlayMedia("https://dict.youdao.com/dictvoice?audio=apple")
 
-PlayMedia(uri, time_out := 5000) 
+PlayMedia(uri, time_out := 5000)
 {
     DllCall("Combase\RoActivateInstance", "ptr", CreateHString("Windows.Media.Playback.MediaPlayer"), "ptr*", iMediaPlayer := ComValue(13, 0), "HRESULT")
     iUri := CreateUri(uri)
@@ -730,7 +700,7 @@ PlayMedia(uri, time_out := 5000)
     } until (state == 4 || index > (time_out / 20))
 }
 
-CreateUri(str) 
+CreateUri(str)
 {
     DllCall("ole32\IIDFromString", "str", "{44A9796F-723E-4FDF-A218-033E75B0C084}", "ptr", iid := Buffer(16), "HRESULT")
     DllCall("Combase\RoGetActivationFactory", "ptr", CreateHString("Windows.Foundation.Uri"), "ptr", iid, "ptr*", factory := ComValue(13, 0), "HRESULT")
@@ -738,7 +708,7 @@ CreateUri(str)
     return uri
 }
 
-CreateHString(str) 
+CreateHString(str)
 {
     DllCall("Combase\WindowsCreateString", "wstr", str, "uint", StrLen(str), "ptr*", &hString := 0, "HRESULT")
     return { Ptr: hString, __Delete: (_) => DllCall("Combase\WindowsDeleteString", "ptr", _, "HRESULT") }
@@ -773,7 +743,7 @@ sendcmd2game(str)
 {
     logger.info("sendcn")
     g_lol_api.get_hero_name_and_id(&name, &id)
-	;<font color="#40C1FF">[队伍] 玩家名 (英雄名): </font><font color="#FFFFFF">喊话内容</font>	
+	;<font color="#40C1FF">[队伍] 玩家名 (英雄名): </font><font color="#FFFFFF">喊话内容</font>
     if(InStr(str, '/all '))
     {
         str := LTrim(str, '/all ')
