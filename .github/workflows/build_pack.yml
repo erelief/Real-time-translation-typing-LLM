@@ -71,15 +71,10 @@ jobs:
 
         # 复制必需的 lib 文件
         New-Item -ItemType Directory -Force -Path "dist/lib"
-        Copy-Item -Path "lib/*.ahk" -Destination "dist/lib/" -Recurse
+        Copy-Item -Path "lib/*.ahk" -Destination "dist/lib/"
         if (Test-Path "lib/dll_64") {
           New-Item -ItemType Directory -Force -Path "dist/lib/dll_64"
-          Copy-Item -Path "lib/dll_64/*" -Destination "dist/lib/dll_64/" -Recurse
-        }
-
-        # 复制 images 文件夹（如果存在）
-        if (Test-Path "images") {
-          Copy-Item -Path "images/*" -Destination "dist/" -Recurse
+          Copy-Item -Path "lib/dll_64/*" -Destination "dist/lib/dll_64/"
         }
 
         # 列出打包内容
