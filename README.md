@@ -13,7 +13,7 @@
 ![图 0](images/16771b28ffa808f0c407a1248a0c8a1775923cd97135443f8899d0adb9a668bc.png)
 
 ## 项目说明
-- 本项目fork自[sxzxs/Real-time Translation Typing](https://github.com/sxzxs/Real-time-translation-typing)，只是将项目改成了由大语言模型驱动的版本，功能归于原开发者
+- 本项目fork自[sxzxs/Real-time Translation Typing](https://github.com/sxzxs/Real-time-translation-typing)，只是将项目改成了由大语言模型驱动的版本，主要功能归功于于原开发者
 - 所有的更改通过在Claude Code中配置了GLM-4.7后Vibe Coding而成，我自己不会编程
 - 所有的LOL功能原项目本身存在，我自己不玩所以***无法确认效果***
 - 绝大部分技术说明也由AI直接生成，请仔细甄别
@@ -70,7 +70,7 @@
 **运行方式**（任选其一）：
 1. 双击 `实时打字翻译.ahk` 文件
 2. 将 `实时打字翻译.ahk` 拖拽到 `AutoHotkey.exe` 上
-3. 右键 `.ahk` 文件 → "Run Script"
+3. 或右键 `.ahk` 文件 → "Run Script"
 
 **优点**：
 - 可以查看和修改源代码
@@ -85,7 +85,7 @@
 ## 功能变化
 `+` 增加了目标语言切换功能，可自行输入想要翻译成的目标语言
 `-` 去掉了原来传统翻译服务的功能(包括网页和API)
-`-` 去掉了对应的语音相关功能，现代已有更好用的AI方式
+`-` 去掉了对应的语音相关功能，现在已有更好用的AI方式
 `?` LOL 内部功能未修改，但不确定可行性
  
 
@@ -112,15 +112,6 @@
 | 源码运行需要AHK版本 | [AutoHotkey v2+](https://github.com/thqby/AutoHotkey_H/releases) |
 | 网络连接 | 需要稳定的网络连接访问LLM API |
 
-### 建议组件
-
-**AutoHotkey_H v2**
-- 下载地址：https://github.com/thqby/AutoHotkey_H/releases
-- 这是 AutoHotkey 的增强版本，支持 ZMQ 等高级功能
-
-**Microsoft Visual C++ 2015-2019 Redistributable**
-- 大多数 Windows 10/11 系统已预装
-- 如果程序无法运行，请手动安装：https://aka.ms/vs/17/release/vc_redist.x64.exe
 
 ## 配置说明
 
