@@ -20,6 +20,11 @@ OnMessage(WM_IME_CHAR := 0x0286, ON_MESSAGE_WM_IME_CHAR)
 OnMessage(0x0100, ON_WM_KEYDOWN)  ; 0x0100 是 WM_KEYDOWN
 ;OnMessage(0x0101, ON_WM_KEYUP)    ; 0x0101 是 WM_KEYUP
 
+; 鼠标消息监听（用于拖拽）
+OnMessage(0x0201, ON_WM_LBUTTONDOWN)   ; WM_LBUTTONDOWN
+OnMessage(0x0231, ON_WM_ENTERSIZEMOVE) ; WM_ENTERSIZEMOVE
+OnMessage(0x0232, ON_WM_EXITSIZEMOVE)  ; WM_EXITSIZEMOVE
+
 ; 获取当前服务的显示名称（优先使用 display_name，否则使用配置名）
 get_current_service_display_name()
 {
@@ -31,7 +36,10 @@ get_current_service_display_name()
 ; ESC 退出翻译器（等待按键释放，避免按键传递给其他窗口）
 close_translator(*)
 {
+    global g_eb, g_dh, g_last_translation
     g_eb.hide()
+    g_dh.hide()
+    g_last_translation := ""  ; 清除翻译结果记忆
     KeyWait("Esc")  ; 等待 ESC 释放，阻止按键传递
 }
 
@@ -84,12 +92,19 @@ main()
     }
 
     global g_eb := Edit_box(0, 0, 1000, 100)
+    global g_dh := DragHandle()  ; 拖拽手柄
     global g_is_ime_char := false
     global g_cursor_x := 0
     global g_cursor_y := 0
     global g_window_hwnd := 0
     global g_is_input_mode := true
     global g_lol_api := Lcu()
+
+    ; 位置记忆相关变量（会话级，按进程名）
+    global g_manual_positions := Map()
+
+    ; 保存最后一次翻译结果（用于拖拽后显示）
+    global g_last_translation := ""
 
     zmq_version(&a := 0, &b := 0, &c := 0)
     logger.info("版本: ", a, b, c)
@@ -101,6 +116,7 @@ main()
     rtn := zmq_connect(g_requester, "tcp://localhost:5555")
 
     g_eb.hide()
+    g_dh.hide()
 
 	HotIfWinExist("ahk_class RiotWindowClass")
         Hotkey('XButton1', (key) => fanyi()) ;打开翻译器
@@ -230,12 +246,13 @@ switch_lol_send_mode(p*)
 
 send_command(p*)
 {
-    global g_window_hwnd
+    global g_window_hwnd, g_dh
     static before_txt := g_eb.text
     try
     {
         data := g_eb.text
         g_eb.hide()
+        g_dh.hide()  ; 隐藏拖拽框
         old := A_Clipboard
         if(p[1] == 'Primitive')
             A_Clipboard := data
@@ -313,20 +330,45 @@ tab_send(*)
 
 fanyi(*)
 {
-    global g_cursor_x
-    global g_cursor_y
-    global g_window_hwnd
+    global g_cursor_x, g_cursor_y
+    global g_window_hwnd, g_eb, g_dh
+    global g_manual_positions
+
+    ; 尝试获取光标位置
     if(!(g_window_hwnd := GetCaretPosEx(&x, &y, &w, &h)))
     {
         g_window_hwnd := WinExist("A")
         MouseGetPos(&x, &y)
     }
+
+    ; 获取进程名，用于位置记忆
+    process_name := WinGetProcessName("ahk_id " g_window_hwnd)
+
+    ; 检查当前会话是否有该进程的记忆位置
+    if (g_manual_positions.Has(process_name))
+    {
+        pos := g_manual_positions[process_name]
+        x := pos.x
+        y := pos.y
+        logger.info("使用记忆位置: " process_name, x, y)
+    }
+    else
+    {
+        logger.info("使用默认光标位置: " process_name, x, y)
+    }
+
     g_cursor_x := x
     g_cursor_y := y
-    g_eb.show(x, y)
+
+    ; 显示拖拽手柄（在 x 位置）
+    g_dh.show(x, y)
+
+    ; 显示输入框（在手柄右侧 30px）
+    g_eb.show(x + 30, y)
+
+    ; 显示 Tooltip（在上方 45px）
     display_name := get_current_service_display_name()
-    btt('[' display_name ']', Integer(g_cursor_x), Integer(g_cursor_y) - 45,,OwnzztooltipStyle1,{Transparent:180,DistanceBetweenMouseXAndToolTip:-100,DistanceBetweenMouseYAndToolTip:-20})
-    g_eb.draw()
+    btt('[' display_name ']', Integer(x), Integer(y) - 45,,OwnzztooltipStyle1,{Transparent:180,DistanceBetweenMouseXAndToolTip:-100,DistanceBetweenMouseYAndToolTip:-20})
 }
 ON_WM_KEYDOWN(a*)
 {
@@ -334,6 +376,98 @@ ON_WM_KEYDOWN(a*)
         g_eb.left()
     else if(a[1] == 39)
         g_eb.right()
+}
+
+; ========== 鼠标拖拽相关函数 ==========
+
+; 拖拽定时器回调：持续更新输入框位置
+DragUpdateTimer()
+{
+    global g_dh, g_eb
+
+    if (!g_dh.is_dragging)
+        return
+
+    ; 获取手柄当前位置并移动输入框
+    local x, y
+    g_dh.ui.gui.GetPos(&x, &y)
+    g_eb.move(x + 30, y)
+}
+
+; 鼠标左键按下：开始拖拽手柄
+ON_WM_LBUTTONDOWN(wParam, lParam, msg, hwnd)
+{
+    global g_dh
+
+    ; 只处理手柄窗口的消息
+    if (hwnd != g_dh.ui.Hwnd)
+        return
+
+    ; 标记正在拖拽
+    g_dh.is_dragging := true
+
+    ; 隐藏 Tooltip
+    OwnzztooltipEnd()
+
+    ; 使用 PostMessage 0xA1 让 Windows 系统处理拖拽（像拖动桌面图标一样）
+    PostMessage(0xA1, 2, 0, , "ahk_id " hwnd)
+
+    logger.info(">>> 开始拖拽")
+    return 0  ; 拦截消息
+}
+
+; 进入拖拽模式：启动定时器更新输入框位置
+ON_WM_ENTERSIZEMOVE(wParam, lParam, msg, hwnd)
+{
+    global g_dh
+
+    ; 只处理手柄窗口的消息
+    if (hwnd != g_dh.ui.Hwnd)
+        return
+
+    logger.info(">>> 进入拖拽模式，启动定时器")
+    ; 每 16ms 更新一次（约 60fps）
+    SetTimer(DragUpdateTimer, 16)
+}
+
+; 退出拖拽模式：停止定时器并保存位置
+ON_WM_EXITSIZEMOVE(wParam, lParam, msg, hwnd)
+{
+    global g_dh, g_eb, g_window_hwnd, g_cursor_x, g_cursor_y, g_last_translation
+    global g_manual_positions
+
+    ; 只处理手柄窗口的消息
+    if (hwnd != g_dh.ui.Hwnd)
+        return
+
+    ; 停止定时器
+    SetTimer(DragUpdateTimer, 0)
+
+    ; 标记拖拽结束
+    g_dh.is_dragging := false
+
+    ; 保存位置
+    local x, y
+    g_dh.ui.gui.GetPos(&x, &y)
+    process_name := WinGetProcessName("ahk_id " g_window_hwnd)
+    g_manual_positions[process_name] := {x: x, y: y}
+
+    ; 更新全局坐标
+    g_cursor_x := x
+    g_cursor_y := y
+
+    ; 重新显示 Tooltip（包含翻译结果）
+    display_name := get_current_service_display_name()
+    if (g_last_translation != "")
+    {
+        btt(display_name ':' g_last_translation, Integer(x), Integer(y) - 45,,OwnzztooltipStyle1,{Transparent:180,DistanceBetweenMouseXAndToolTip:-100,DistanceBetweenMouseYAndToolTip:-20})
+    }
+    else
+    {
+        btt('[' display_name ']', Integer(x), Integer(y) - 45,,OwnzztooltipStyle1,{Transparent:180,DistanceBetweenMouseXAndToolTip:-100,DistanceBetweenMouseYAndToolTip:-20})
+    }
+
+    logger.info(">>> 拖拽结束，保存位置:", process_name, x, y)
 }
 
 ON_MESSAGE_WM_CHAR(a*)
@@ -352,6 +486,66 @@ ON_MESSAGE_WM_IME_CHAR(a*)
     g_eb.set_imm(a[1])
 }
 
+; ========== 拖拽手柄类 ==========
+class DragHandle
+{
+    __New()
+    {
+        ; 使用 Direct2DRender 创建窗口（与输入框一致）
+        this.ui := Direct2DRender(0, 0, 30, 35,,, false)  ; 30x35，clickThrough=false
+        this.x := 0
+        this.y := 0
+        this.show_status := false
+
+        ; 拖拽状态
+        this.is_dragging := false
+    }
+
+    show(x, y)
+    {
+        this.x := x
+        this.y := y
+        this.ui.gui.show('x' x ' y' y)
+        this.show_status := true
+        this.draw()
+    }
+
+    hide()
+    {
+        this.ui.gui.hide()
+        this.show_status := false
+        this.is_dragging := false  ; 重置拖拽状态
+    }
+
+    move(x, y)
+    {
+        this.x := x
+        this.y := y
+        this.ui.SetPosition(x, y)
+    }
+
+    get_pos()
+    {
+        return {x: this.x, y: this.y}
+    }
+
+    draw()
+    {
+        ui := this.ui
+        if(ui.BeginDraw())
+        {
+            ; 绘制半透明背景
+            ui.FillRoundedRectangle(0, 0, 30, 35, 4, 4, 0xcc2A2A2A)
+            ui.DrawRoundedRectangle(0, 0, 30, 35, 4, 4, 0xFF40C1FF, 1)
+
+            ; 绘制 ≡ 符号（居中）
+            ui.DrawText('≡', 3, 4, 24, 0xFF40C1FF)
+
+            ui.EndDraw()
+        }
+    }
+}
+
 class Edit_box
 {
     __New(x, y, w, h)
@@ -360,7 +554,7 @@ class Edit_box
         this.y := 0
         this.w := w
         this.h := h
-        this.ui := Direct2DRender(x, y, w, h,,, true)
+        this.ui := Direct2DRender(x, y, w, h,,, true)  ; 保持原来的 clickThrough=true，避免白框
         this.text := ''
         this.fanyi_result := ''
         this.insert_pos := 0 ;距离txt最后边的距离
@@ -407,6 +601,8 @@ class Edit_box
         if(this.show_status && cd = g_current_api)
         {
             this.fanyi_result := text
+            global g_last_translation
+            g_last_translation := text  ; 保存最后一次翻译结果
             this.ui.gui.GetPos(&x, &y, &w, &h)
             display_name := get_current_service_display_name()
             btt(display_name ':' text, Integer(x), Integer(y) - 45,,OwnzztooltipStyle1,{Transparent:180,DistanceBetweenMouseXAndToolTip:-100,DistanceBetweenMouseYAndToolTip:-20})
@@ -416,6 +612,7 @@ class Edit_box
     {
         this.ui.gui.show('x' x ' y' y)
         this.show_status := true
+        this.draw()  ; 立即绘制，避免白框
     }
     hide()
     {
@@ -437,15 +634,15 @@ class Edit_box
         ui.gui.GetPos(&x, &y, &w, &h)
         logger.info(x, y, w, h)
         ;计算文字的大小
-        wh := this.ui.GetTextWidthHeight(this.text, 20)
-        last_txt_wh := this.ui.GetTextWidthHeight(SubStr(this.text, -this.insert_pos), 20)
+        wh := this.ui.GetTextWidthHeight(this.text, 30)
+        last_txt_wh := this.ui.GetTextWidthHeight(SubStr(this.text, -this.insert_pos), 30)
         logger.info(wh)
         this.move(x, y, wh.width + 100, wh.height + 100)
         if(ui.BeginDraw())
         {
             ui.FillRoundedRectangle(0, 0, wh.width, wh.height, 5, 5, 0xcc1E1E1E)
             ui.DrawRoundedRectangle(0, 0, wh.width, wh.height, 5, 5, 0xffff0000, 1)
-            ui.DrawText(this.text, 0, 0, 20, 0xFFC9E47E)
+            ui.DrawText(this.text, 0, 0, 30, 0xFFC9E47E)
             ui.DrawLine(wh.width - last_txt_wh.width, 0, wh.width - last_txt_wh.width, wh.height, 0xAA00FF00)
             logger.err(this.text)
             ui.EndDraw()
