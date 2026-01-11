@@ -38,12 +38,12 @@ class logger
         lib_path := dir
         if(A_IsCompiled)
         {
-            path := (A_PtrSize == 4) ? A_ScriptDir . "\lib\dll_32\" : A_ScriptDir . "\lib\dll_64\"
+            path := (A_PtrSize == 4) ? A_ScriptDir . "\lib\32bit\" : A_ScriptDir . "\lib\64bit\"
             lib_path := A_ScriptDir . "\lib"
         }
         else
         {
-            path := (A_PtrSize == 4) ? dir . "\dll_32\" : dir . "\dll_64\"
+            path := (A_PtrSize == 4) ? dir . "\32bit\" : dir . "\64bit\"
         }
         dllcall("SetDllDirectory", "Str", path)
         for k,v in this.LOG4AHK_G_MY_DLL_USE_MAP

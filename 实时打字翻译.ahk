@@ -42,6 +42,7 @@ close_translator(*)
 }
 
 main()
+main()
 {
     btt('加载中。。。',0, 0,,OwnzztooltipStyle1,{Transparent:180,DistanceBetweenMouseXAndToolTip:-100,DistanceBetweenMouseYAndToolTip:-20})
 
