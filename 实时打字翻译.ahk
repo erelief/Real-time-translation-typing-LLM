@@ -18,7 +18,6 @@ OnMessage(WM_CHAR := 0x0102, ON_MESSAGE_WM_CHAR)
 OnMessage(WM_IME_CHAR := 0x0286, ON_MESSAGE_WM_IME_CHAR)
 
 OnMessage(0x0100, ON_WM_KEYDOWN)  ; 0x0100 是 WM_KEYDOWN
-;OnMessage(0x0101, ON_WM_KEYUP)    ; 0x0101 是 WM_KEYUP
 
 ; 鼠标消息监听（用于拖拽）
 OnMessage(0x0201, ON_WM_LBUTTONDOWN)   ; WM_LBUTTONDOWN
@@ -42,7 +41,6 @@ close_translator(*)
     KeyWait("Esc")  ; 等待 ESC 释放，阻止按键传递
 }
 
-main()
 main()
 {
     btt('加载中。。。',0, 0,,OwnzztooltipStyle1,{Transparent:180,DistanceBetweenMouseXAndToolTip:-100,DistanceBetweenMouseYAndToolTip:-20})
@@ -223,7 +221,6 @@ serpentine_naming(key := 'snake')
     }
     SendInput('{RShift Down}{Insert}{RShift Up}')
     Sleep(200)
-    ; A_Clipboard := old
 }
 
 copy(*)
@@ -688,12 +685,10 @@ class Edit_box
         logger.err(left_txt, right_txt)
         if(char == '`b')
         {
-            ;this.text := SubStr(this.text, 1, -1)
             this.text := SubStr(left_txt, 1, -1) right_txt
         }
         else
         {
-            ;this.text .= char
             this.text := left_txt char right_txt
         }
         logger.err(this.text, this.insert_pos)
