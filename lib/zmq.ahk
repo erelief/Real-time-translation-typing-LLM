@@ -410,9 +410,9 @@ class zmq_constant
                , "zmq_z85_encode", 0)
         SplitPath(A_LineFile,,&dir)
         if(A_IsCompiled)
-            path := (A_PtrSize == 4) ? A_ScriptDir . "\lib\dll_32\" : A_ScriptDir . "\lib\dll_64\"
+            path := (A_PtrSize == 4) ? A_ScriptDir . "\lib\32bit\" : A_ScriptDir . "\lib\64bit\"
         else
-            path := (A_PtrSize == 4) ? dir . "\dll_32\" : dir . "\dll_64\"
+            path := (A_PtrSize == 4) ? dir . "\32bit\" : dir . "\64bit\"
         dllcall("SetDllDirectory", "Str", path)
         for k,v in zmqdll_func
             zmqdll_func[k] := DllCall("GetProcAddress", "Ptr", DllCall("LoadLibrary", "Str", zmqdll, "Ptr"), "AStr", k, "Ptr")
