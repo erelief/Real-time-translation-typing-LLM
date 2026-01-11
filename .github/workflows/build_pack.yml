@@ -57,13 +57,19 @@ jobs:
         New-Item -ItemType Directory -Force -Path "dist\lib"
         Copy-Item -Path "lib\*.ahk" -Destination "dist\lib\" -Force
 
-        # 5. 复制 dll_64 文件夹
+        # 5. 复制 utility 文件夹（LOL 相关功能依赖）
+        if (Test-Path "utility") {
+            Copy-Item -Path "utility" -Destination "dist\" -Recurse -Force
+            Write-Host "✅ Copied utility directory"
+        }
+
+        # 6. 复制 dll_64 文件夹
         if (Test-Path "lib\dll_64") {
             Copy-Item -Path "lib\dll_64" -Destination "dist\lib" -Recurse -Force
             Write-Host "✅ Copied dll_64 directory"
         }
 
-        # 6. 列出最终打包内容以供检查
+        # 7. 列出最终打包内容以供检查
         Write-Host "📦 Final Package contents:"
         Get-ChildItem -Path "dist" -Recurse | Select-Object FullName, Length
 
