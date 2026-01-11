@@ -72,6 +72,27 @@ check_focus_and_close()
     }
 }
 
+; ========== 光标闪烁定时器 ==========
+toggle_cursor_blink()
+{
+    global g_cursor_visible, g_eb, g_cursor_blink_timer
+
+    ; 如果输入框已隐藏，停止闪烁
+    if (!g_eb.show_status)
+    {
+        if (g_cursor_blink_timer)
+            SetTimer(g_cursor_blink_timer, 0)
+        g_cursor_blink_timer := 0
+        return
+    }
+
+    ; 切换光标可见状态
+    g_cursor_visible := !g_cursor_visible
+
+    ; 重绘输入框以显示/隐藏光标（不触发翻译）
+    g_eb.draw(0, false)
+}
+
 main()
 main()
 {
@@ -140,6 +161,10 @@ main()
 
     ; 焦点检查定时器（用于检测点击其他地方自动退出）
     global g_focus_check_timer := 0
+
+    ; 光标闪烁相关变量
+    global g_cursor_visible := true  ; 光标可见状态
+    global g_cursor_blink_timer := 0  ; 光标闪烁定时器
 
     zmq_version(&a := 0, &b := 0, &c := 0)
     logger.info("版本: ", a, b, c)
@@ -402,15 +427,24 @@ fanyi(*)
     g_cursor_x := x
     g_cursor_y := y
 
-    ; 显示拖拽手柄（在 x 位置）
-    g_dh.show(x, y)
+    ; 计算布局位置
+    ; 手柄宽度30px，tooltip在y-45高度
+    ; 新布局：手柄和tooltip在同一行（y-45），输入框在tooltip下方（y）
+    handle_width := 30  ; 手柄宽度
+    tooltip_y := y - 45
 
-    ; 显示输入框（在手柄右侧 30px）
-    g_eb.show(x + 30, y)
-
-    ; 显示 Tooltip（在上方 45px）
+    ; 显示 Tooltip（在手柄右侧，同一行）并获取实际高度
     display_name := get_current_service_display_name()
-    btt('[' display_name ']', Integer(x), Integer(y) - 45,,OwnzztooltipStyle1,{Transparent:180,DistanceBetweenMouseXAndToolTip:-100,DistanceBetweenMouseYAndToolTip:-20})
+    tooltip_info := btt('[' display_name ']', Integer(x + handle_width), Integer(tooltip_y),,OwnzztooltipStyle1,{Transparent:180,DistanceBetweenMouseXAndToolTip:-100,DistanceBetweenMouseYAndToolTip:-20})
+
+    ; 获取tooltip的实际高度
+    tooltip_height := tooltip_info.H
+
+    ; 显示拖拽手柄（高度自适应tooltip）
+    g_dh.show_with_height(x, tooltip_y, handle_width, tooltip_height)
+
+    ; 显示输入框（在tooltip下方，左对齐tooltip）
+    g_eb.show(x + handle_width, y)
 }
 ON_WM_KEYDOWN(a*)
 {
@@ -430,20 +464,26 @@ DragUpdateTimer()
     if (!g_dh.is_dragging)
         return
 
-    ; 获取手柄当前位置并移动输入框
+    ; 获取手柄当前位置
     local x, y
     g_dh.ui.gui.GetPos(&x, &y)
-    g_eb.move(x + 30, y)
 
-    ; 更新 Tooltip 位置和内容（在手柄上方 45px）
+    ; 手柄宽度
+    handle_width := 30
+
+    ; 移动输入框（在tooltip下方，左对齐tooltip）
+    ; 手柄在y，tooltip也在y（同一行），输入框在y+45（tooltip下方）
+    g_eb.move(x + handle_width, y + 45)
+
+    ; 更新 Tooltip 位置和内容（在手柄右侧，同一行）
     display_name := get_current_service_display_name()
     if (g_last_translation != "")
     {
-        btt('[' display_name ']: ' g_last_translation, Integer(x), Integer(y) - 45,,OwnzztooltipStyle1,{Transparent:180,DistanceBetweenMouseXAndToolTip:-100,DistanceBetweenMouseYAndToolTip:-20})
+        btt('[' display_name ']: ' g_last_translation, Integer(x + handle_width), Integer(y),,OwnzztooltipStyle1,{Transparent:180,DistanceBetweenMouseXAndToolTip:-100,DistanceBetweenMouseYAndToolTip:-20})
     }
     else
     {
-        btt('[' display_name ']', Integer(x), Integer(y) - 45,,OwnzztooltipStyle1,{Transparent:180,DistanceBetweenMouseXAndToolTip:-100,DistanceBetweenMouseYAndToolTip:-20})
+        btt('[' display_name ']', Integer(x + handle_width), Integer(y),,OwnzztooltipStyle1,{Transparent:180,DistanceBetweenMouseXAndToolTip:-100,DistanceBetweenMouseYAndToolTip:-20})
     }
 }
 
@@ -469,13 +509,22 @@ ON_WM_LBUTTONDOWN(wParam, lParam, msg, hwnd)
 ; 进入拖拽模式：启动定时器更新输入框位置
 ON_WM_ENTERSIZEMOVE(wParam, lParam, msg, hwnd)
 {
-    global g_dh
+    global g_dh, g_cursor_blink_timer, g_cursor_visible, g_eb
 
     ; 只处理手柄窗口的消息
     if (hwnd != g_dh.ui.Hwnd)
         return
 
     logger.info(">>> 进入拖拽模式，启动定时器")
+
+    ; 停止光标闪烁并隐藏光标
+    if (g_cursor_blink_timer)
+        SetTimer(g_cursor_blink_timer, 0)
+    g_cursor_visible := false
+
+    ; 立即重绘以隐藏光标（使用简化绘制）
+    g_eb.draw_fast()
+
     ; 每 16ms 更新一次（约 60fps）
     SetTimer(DragUpdateTimer, 16)
 }
@@ -484,7 +533,7 @@ ON_WM_ENTERSIZEMOVE(wParam, lParam, msg, hwnd)
 ON_WM_EXITSIZEMOVE(wParam, lParam, msg, hwnd)
 {
     global g_dh, g_eb, g_window_hwnd, g_cursor_x, g_cursor_y
-    global g_manual_positions
+    global g_manual_positions, g_cursor_blink_timer, g_cursor_visible
 
     ; 只处理手柄窗口的消息
     if (hwnd != g_dh.ui.Hwnd)
@@ -495,6 +544,10 @@ ON_WM_EXITSIZEMOVE(wParam, lParam, msg, hwnd)
 
     ; 标记拖拽结束
     g_dh.is_dragging := false
+
+    ; 恢复光标闪烁
+    g_cursor_visible := true
+    g_cursor_blink_timer := SetTimer(toggle_cursor_blink, 530)
 
     ; 保存位置
     local x, y
@@ -534,7 +587,8 @@ class DragHandle
     __New()
     {
         ; 使用 Direct2DRender 创建窗口（与输入框一致）
-        this.ui := Direct2DRender(0, 0, 30, 35,,, false)  ; 30x35，clickThrough=false
+        ; 调整高度为34px以匹配tooltip高度（FontSize:16 + Margin:8×2 + Border:1×2 = 34）
+        this.ui := Direct2DRender(0, 0, 30, 34,,, false)  ; 30x34，clickThrough=false
         this.x := 0
         this.y := 0
         this.show_status := false
@@ -545,6 +599,18 @@ class DragHandle
 
     show(x, y)
     {
+        this.x := x
+        this.y := y
+        this.ui.gui.show('x' x ' y' y)
+        this.show_status := true
+        this.draw()
+    }
+
+    ; 使用指定高度显示手柄（用于匹配tooltip实际高度）
+    show_with_height(x, y, width, height)
+    {
+        ; 重新创建Direct2D窗口以适应新的高度
+        this.ui := Direct2DRender(0, 0, width, height,,, false)
         this.x := x
         this.y := y
         this.ui.gui.show('x' x ' y' y)
@@ -576,11 +642,15 @@ class DragHandle
         ui := this.ui
         if(ui.BeginDraw())
         {
-            ; 绘制半透明背景
-            ui.FillRoundedRectangle(0, 0, 30, 35, 4, 4, 0xcc2A2A2A)
-            ui.DrawRoundedRectangle(0, 0, 30, 35, 4, 4, 0xFF40C1FF, 1)
+            ; 获取窗口实际尺寸
+            width := this.ui.width
+            height := this.ui.height
 
-            ; 绘制 ≡ 符号（居中）
+            ; 绘制半透明背景（使用实际尺寸）
+            ui.FillRoundedRectangle(0, 0, width, height, 4, 4, 0xcc2A2A2A)
+            ui.DrawRoundedRectangle(0, 0, width, height, 4, 4, 0xFF40C1FF, 1)
+
+            ; 绘制 ≡ 符号（居中，使用实际字体大小24）
             ui.DrawText('≡', 3, 4, 24, 0xFF40C1FF)
 
             ui.EndDraw()
@@ -606,6 +676,9 @@ class Edit_box
         this.debounce_delay := 500  ; 停止输入500ms后触发翻译
 
         this.show_status := false
+
+        ; 重入保护：防止同时调用 draw() 导致 Direct2D 状态冲突
+        this.is_drawing := false
     }
 
     ; 静态回调方法
@@ -650,28 +723,34 @@ class Edit_box
             this.fanyi_result := text
             global g_last_translation
 
-            ; 获取手柄位置（tooltip固定在手柄上方）
+            ; 获取手柄位置（tooltip在手柄右侧，同一行）
             g_dh.ui.gui.GetPos(&x, &y)
+            handle_width := 30
             display_name := get_current_service_display_name()
 
             ; 如果翻译结果为空，只显示服务名
             if (text = "")
             {
                 g_last_translation := ""
-                btt('[' display_name ']', Integer(x), Integer(y) - 45,,OwnzztooltipStyle1,{Transparent:180,DistanceBetweenMouseXAndToolTip:-100,DistanceBetweenMouseYAndToolTip:-20})
+                btt('[' display_name ']', Integer(x + handle_width), Integer(y),,OwnzztooltipStyle1,{Transparent:180,DistanceBetweenMouseXAndToolTip:-100,DistanceBetweenMouseYAndToolTip:-20})
             }
             else
             {
                 g_last_translation := text  ; 保存翻译结果
-                btt('[' display_name ']: ' text, Integer(x), Integer(y) - 45,,OwnzztooltipStyle1,{Transparent:180,DistanceBetweenMouseXAndToolTip:-100,DistanceBetweenMouseYAndToolTip:-20})
+                btt('[' display_name ']: ' text, Integer(x + handle_width), Integer(y),,OwnzztooltipStyle1,{Transparent:180,DistanceBetweenMouseXAndToolTip:-100,DistanceBetweenMouseYAndToolTip:-20})
             }
         }
     }
     show(x := 0, y := 0)
     {
-        global g_focus_check_timer
+        global g_focus_check_timer, g_cursor_blink_timer, g_cursor_visible
         this.ui.gui.show('x' x ' y' y)
         this.show_status := true
+
+        ; 重置光标状态并启动闪烁
+        g_cursor_visible := true
+        g_cursor_blink_timer := SetTimer(toggle_cursor_blink, 530)
+
         this.draw()  ; 立即绘制，避免白框
 
         ; 启动焦点检查定时器（每200ms检查一次）
@@ -679,7 +758,7 @@ class Edit_box
     }
     hide()
     {
-        global g_is_ime_char, g_is_translating, g_focus_check_timer
+        global g_is_ime_char, g_is_translating, g_focus_check_timer, g_cursor_blink_timer
         this.clear()
         this.ui.gui.hide()
         g_is_ime_char := false
@@ -691,17 +770,110 @@ class Edit_box
         if (g_focus_check_timer)
             SetTimer(g_focus_check_timer, 0)
         g_focus_check_timer := 0
+
+        ; 停止光标闪烁定时器
+        if (g_cursor_blink_timer)
+            SetTimer(g_cursor_blink_timer, 0)
+        g_cursor_blink_timer := 0
     }
     move(x, y, w := 0, h := 0)
     {
         this.ui.SetPosition(x, y, w, h)
     }
-    draw(flag := 0)
+
+    ; 快速绘制：只绘制文本，不绘制光标，不执行复杂操作（用于拖拽时）
+    draw_fast()
     {
-        global g_current_api, g_translators, g_config, g_last_translation, g_dh
+        ; 重入保护
+        if (this.is_drawing)
+            return
+
+        ui := this.ui
+        this.is_drawing := true
+
+        try
+        {
+            ; 计算文本宽度
+            wh := this.ui.GetTextWidthHeight(this.text, 30)
+
+            if(ui.BeginDraw())
+            {
+                ui.FillRoundedRectangle(0, 0, wh.width, wh.height, 5, 5, 0xcc1E1E1E)
+                ui.DrawRoundedRectangle(0, 0, wh.width, wh.height, 5, 5, 0xffff0000, 1)
+
+                ; 只绘制文本，不绘制光标
+                draw_x := 0
+                for char_index, char in StrSplit(this.text, "")
+                {
+                    if (char == " ")
+                    {
+                        space_wh := this.ui.GetTextWidthHeight("␣", 30)
+                        ui.DrawText("␣", draw_x, 0, 30, 0x80FFFFFF)
+                        draw_x += space_wh.width
+                    }
+                    else
+                    {
+                        char_wh := this.ui.GetTextWidthHeight(char, 30)
+                        ui.DrawText(char, draw_x, 0, 30, 0xFFC9E47E)
+                        draw_x += char_wh.width
+                    }
+                }
+                ui.EndDraw()
+            }
+        }
+        finally
+        {
+            this.is_drawing := false
+        }
+    }
+
+    draw(flag := 0, trigger_translation := true)
+    {
+        ; 重入保护：如果正在绘制，直接返回避免 Direct2D 状态冲突
+        if (this.is_drawing)
+            return
+
+        global g_current_api, g_translators, g_config, g_last_translation, g_dh, g_cursor_visible
         ui := this.ui
         ui.gui.GetPos(&x, &y, &w, &h)
         logger.info(x, y, w, h)
+
+        ; 标记开始绘制
+        this.is_drawing := true
+
+        try
+        {
+            ; 拖拽时简化绘制，不执行复杂操作
+            if (g_dh.is_dragging)
+        {
+            ; 只绘制内容，不执行翻译和 tooltip 更新
+            wh := this.ui.GetTextWidthHeight(this.text, 30)
+            if(ui.BeginDraw())
+            {
+                ui.FillRoundedRectangle(0, 0, wh.width, wh.height, 5, 5, 0xcc1E1E1E)
+                ui.DrawRoundedRectangle(0, 0, wh.width, wh.height, 5, 5, 0xffff0000, 1)
+
+                ; 分段绘制字符（不绘制光标）
+                draw_x := 0
+                for char_index, char in StrSplit(this.text, "")
+                {
+                    if (char == " ")
+                    {
+                        space_wh := this.ui.GetTextWidthHeight("␣", 30)
+                        ui.DrawText("␣", draw_x, 0, 30, 0x80FFFFFF)
+                        draw_x += space_wh.width
+                    }
+                    else
+                    {
+                        char_wh := this.ui.GetTextWidthHeight(char, 30)
+                        ui.DrawText(char, draw_x, 0, 30, 0xFFC9E47E)
+                        draw_x += char_wh.width
+                    }
+                }
+                ui.EndDraw()
+            }
+            return  ; 拖拽时直接返回，不执行后续的翻译等复杂操作
+        }
 
         ;计算文字的大小
         wh := this.ui.GetTextWidthHeight(this.text, 30)
@@ -713,10 +885,11 @@ class Edit_box
         if (this.text = "")
         {
             g_last_translation := ""
-            ; 获取手柄位置（tooltip固定在手柄上方）
+            ; 获取手柄位置（tooltip在手柄右侧，同一行）
             g_dh.ui.gui.GetPos(&handle_x, &handle_y)
+            handle_width := 30
             display_name := get_current_service_display_name()
-            btt('[' display_name ']', Integer(handle_x), Integer(handle_y) - 45,,OwnzztooltipStyle1,{Transparent:180,DistanceBetweenMouseXAndToolTip:-100,DistanceBetweenMouseYAndToolTip:-20})
+            btt('[' display_name ']', Integer(handle_x + handle_width), Integer(handle_y),,OwnzztooltipStyle1,{Transparent:180,DistanceBetweenMouseXAndToolTip:-100,DistanceBetweenMouseYAndToolTip:-20})
         }
         if(ui.BeginDraw())
         {
@@ -743,12 +916,39 @@ class Edit_box
                 }
             }
 
-            ui.DrawLine(wh.width - last_txt_wh.width, 0, wh.width - last_txt_wh.width, wh.height, 0xAA00FF00)
+            ; 绘制光标（只在有焦点且可见状态时显示）
+            if (g_cursor_visible)
+            {
+                ; 计算末尾 insert_pos 个字符的实际绘制宽度（考虑空格替换为 ␣）
+                tail_width := 0
+                if (this.insert_pos > 0 && this.text != "")
+                {
+                    ; 从末尾取 insert_pos 个字符
+                    tail_text := SubStr(this.text, -this.insert_pos + 1)
+                    ; 计算这些字符的实际绘制宽度
+                    for char_index, char in StrSplit(tail_text, "")
+                    {
+                        if (char == " ")
+                            tail_width += this.ui.GetTextWidthHeight("␣", 30).width
+                        else
+                            tail_width += this.ui.GetTextWidthHeight(char, 30).width
+                    }
+                }
+
+                ; 光标位置：实际绘制总宽度 - 末尾字符的实际宽度
+                cursor_x := draw_x - tail_width
+                ; 绘制闪烁的竖线光标（2px宽，白色）
+                ui.DrawLine(cursor_x, 2, cursor_x, wh.height - 2, 0xFFFFFFFF, 2)
+            }
+
             logger.err(this.text)
             ui.EndDraw()
         }
 
-        ; 使用LLM翻译
+        ; 使用LLM翻译（只有当 trigger_translation 为 true 时才触发）
+        if (!trigger_translation)
+            return  ; 光标闪烁等场景不需要触发翻译
+
         input_text := this.text
         api_config := g_config[g_current_api]
 
@@ -760,6 +960,12 @@ class Edit_box
                 SetTimer(this.debounce_timer, 0)
 
             this.debounce_timer := SetTimer(() => this.trigger_translate(), -this.debounce_delay)
+        }
+        }
+        finally
+        {
+            ; 清除绘制标志，允许下次绘制
+            this.is_drawing := false
         }
     }
 
