@@ -36,10 +36,9 @@ get_current_service_display_name()
 ; ESC 退出翻译器（等待按键释放，避免按键传递给其他窗口）
 close_translator(*)
 {
-    global g_eb, g_dh, g_last_translation
+    global g_eb, g_dh
     g_eb.hide()
     g_dh.hide()
-    g_last_translation := ""  ; 清除翻译结果记忆
     KeyWait("Esc")  ; 等待 ESC 释放，阻止按键传递
 }
 
@@ -103,7 +102,7 @@ main()
     ; 位置记忆相关变量（会话级，按进程名）
     global g_manual_positions := Map()
 
-    ; 保存最后一次翻译结果（用于拖拽后显示）
+    ; 保存最后一次翻译结果（用于拖拽时显示）
     global g_last_translation := ""
 
     zmq_version(&a := 0, &b := 0, &c := 0)
@@ -332,7 +331,10 @@ fanyi(*)
 {
     global g_cursor_x, g_cursor_y
     global g_window_hwnd, g_eb, g_dh
-    global g_manual_positions
+    global g_manual_positions, g_last_translation
+
+    ; 清除上一次的翻译结果
+    g_last_translation := ""
 
     ; 尝试获取光标位置
     if(!(g_window_hwnd := GetCaretPosEx(&x, &y, &w, &h)))
@@ -380,10 +382,10 @@ ON_WM_KEYDOWN(a*)
 
 ; ========== 鼠标拖拽相关函数 ==========
 
-; 拖拽定时器回调：持续更新输入框位置
+; 拖拽定时器回调：持续更新输入框和 Tooltip 位置
 DragUpdateTimer()
 {
-    global g_dh, g_eb
+    global g_dh, g_eb, g_last_translation
 
     if (!g_dh.is_dragging)
         return
@@ -392,6 +394,17 @@ DragUpdateTimer()
     local x, y
     g_dh.ui.gui.GetPos(&x, &y)
     g_eb.move(x + 30, y)
+
+    ; 更新 Tooltip 位置和内容（在手柄上方 45px）
+    display_name := get_current_service_display_name()
+    if (g_last_translation != "")
+    {
+        btt(display_name ':' g_last_translation, Integer(x), Integer(y) - 45,,OwnzztooltipStyle1,{Transparent:180,DistanceBetweenMouseXAndToolTip:-100,DistanceBetweenMouseYAndToolTip:-20})
+    }
+    else
+    {
+        btt('[' display_name ']', Integer(x), Integer(y) - 45,,OwnzztooltipStyle1,{Transparent:180,DistanceBetweenMouseXAndToolTip:-100,DistanceBetweenMouseYAndToolTip:-20})
+    }
 }
 
 ; 鼠标左键按下：开始拖拽手柄
@@ -405,9 +418,6 @@ ON_WM_LBUTTONDOWN(wParam, lParam, msg, hwnd)
 
     ; 标记正在拖拽
     g_dh.is_dragging := true
-
-    ; 隐藏 Tooltip
-    OwnzztooltipEnd()
 
     ; 使用 PostMessage 0xA1 让 Windows 系统处理拖拽（像拖动桌面图标一样）
     PostMessage(0xA1, 2, 0, , "ahk_id " hwnd)
@@ -433,7 +443,7 @@ ON_WM_ENTERSIZEMOVE(wParam, lParam, msg, hwnd)
 ; 退出拖拽模式：停止定时器并保存位置
 ON_WM_EXITSIZEMOVE(wParam, lParam, msg, hwnd)
 {
-    global g_dh, g_eb, g_window_hwnd, g_cursor_x, g_cursor_y, g_last_translation
+    global g_dh, g_eb, g_window_hwnd, g_cursor_x, g_cursor_y
     global g_manual_positions
 
     ; 只处理手柄窗口的消息
@@ -455,17 +465,6 @@ ON_WM_EXITSIZEMOVE(wParam, lParam, msg, hwnd)
     ; 更新全局坐标
     g_cursor_x := x
     g_cursor_y := y
-
-    ; 重新显示 Tooltip（包含翻译结果）
-    display_name := get_current_service_display_name()
-    if (g_last_translation != "")
-    {
-        btt(display_name ':' g_last_translation, Integer(x), Integer(y) - 45,,OwnzztooltipStyle1,{Transparent:180,DistanceBetweenMouseXAndToolTip:-100,DistanceBetweenMouseYAndToolTip:-20})
-    }
-    else
-    {
-        btt('[' display_name ']', Integer(x), Integer(y) - 45,,OwnzztooltipStyle1,{Transparent:180,DistanceBetweenMouseXAndToolTip:-100,DistanceBetweenMouseYAndToolTip:-20})
-    }
 
     logger.info(">>> 拖拽结束，保存位置:", process_name, x, y)
 }
@@ -602,7 +601,7 @@ class Edit_box
         {
             this.fanyi_result := text
             global g_last_translation
-            g_last_translation := text  ; 保存最后一次翻译结果
+            g_last_translation := text  ; 保存翻译结果
             this.ui.gui.GetPos(&x, &y, &w, &h)
             display_name := get_current_service_display_name()
             btt(display_name ':' text, Integer(x), Integer(y) - 45,,OwnzztooltipStyle1,{Transparent:180,DistanceBetweenMouseXAndToolTip:-100,DistanceBetweenMouseYAndToolTip:-20})
