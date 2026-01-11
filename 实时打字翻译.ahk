@@ -41,6 +41,37 @@ close_translator(*)
     KeyWait("Esc")  ; 等待 ESC 释放，阻止按键传递
 }
 
+; 检查焦点并自动退出（由定时器调用）
+check_focus_and_close()
+{
+    global g_eb, g_dh, g_focus_check_timer
+
+    ; 如果翻译器已隐藏，停止检查
+    if (!g_eb.show_status)
+    {
+        if (g_focus_check_timer)
+            SetTimer(g_focus_check_timer, 0)
+        g_focus_check_timer := 0
+        return
+    }
+
+    ; 检查是否正在拖拽
+    if (g_dh.is_dragging)
+        return  ; 拖拽时不检查焦点
+
+    ; 检查输入框是否是激活窗口
+    input_hwnd := g_eb.ui.gui.Hwnd
+    active_hwnd := WinGetID("A")
+
+    ; 如果输入框不激活，说明用户点击了其他地方 → 自动退出
+    if (active_hwnd != input_hwnd)
+    {
+        logger.info(">>> 输入框失去焦点，自动退出")
+        g_eb.hide()
+        g_dh.hide()
+    }
+}
+
 main()
 main()
 {
@@ -106,6 +137,9 @@ main()
 
     ; 翻译状态标志（用于防止翻译未完成时发送）
     global g_is_translating := false
+
+    ; 焦点检查定时器（用于检测点击其他地方自动退出）
+    global g_focus_check_timer := 0
 
     zmq_version(&a := 0, &b := 0, &c := 0)
     logger.info("版本: ", a, b, c)
@@ -405,7 +439,7 @@ DragUpdateTimer()
     display_name := get_current_service_display_name()
     if (g_last_translation != "")
     {
-        btt(display_name ':' g_last_translation, Integer(x), Integer(y) - 45,,OwnzztooltipStyle1,{Transparent:180,DistanceBetweenMouseXAndToolTip:-100,DistanceBetweenMouseYAndToolTip:-20})
+        btt('[' display_name ']: ' g_last_translation, Integer(x), Integer(y) - 45,,OwnzztooltipStyle1,{Transparent:180,DistanceBetweenMouseXAndToolTip:-100,DistanceBetweenMouseYAndToolTip:-20})
     }
     else
     {
@@ -471,6 +505,9 @@ ON_WM_EXITSIZEMOVE(wParam, lParam, msg, hwnd)
     ; 更新全局坐标
     g_cursor_x := x
     g_cursor_y := y
+
+    ; 激活翻译输入框，确保拖动后焦点回到输入框
+    WinActivate("ahk_id " g_eb.ui.gui.Hwnd)
 
     logger.info(">>> 拖拽结束，保存位置:", process_name, x, y)
 }
@@ -601,7 +638,7 @@ class Edit_box
     }
     on_change(cd ,text)
     {
-        global g_is_translating
+        global g_is_translating, g_dh
 
         ; 翻译完成（成功或失败），清除翻译状态
         g_is_translating := false
@@ -613,38 +650,47 @@ class Edit_box
             this.fanyi_result := text
             global g_last_translation
 
+            ; 获取手柄位置（tooltip固定在手柄上方）
+            g_dh.ui.gui.GetPos(&x, &y)
+            display_name := get_current_service_display_name()
+
             ; 如果翻译结果为空，只显示服务名
             if (text = "")
             {
                 g_last_translation := ""
-                this.ui.gui.GetPos(&x, &y, &w, &h)
-                display_name := get_current_service_display_name()
                 btt('[' display_name ']', Integer(x), Integer(y) - 45,,OwnzztooltipStyle1,{Transparent:180,DistanceBetweenMouseXAndToolTip:-100,DistanceBetweenMouseYAndToolTip:-20})
             }
             else
             {
                 g_last_translation := text  ; 保存翻译结果
-                this.ui.gui.GetPos(&x, &y, &w, &h)
-                display_name := get_current_service_display_name()
-                btt(display_name ':' text, Integer(x), Integer(y) - 45,,OwnzztooltipStyle1,{Transparent:180,DistanceBetweenMouseXAndToolTip:-100,DistanceBetweenMouseYAndToolTip:-20})
+                btt('[' display_name ']: ' text, Integer(x), Integer(y) - 45,,OwnzztooltipStyle1,{Transparent:180,DistanceBetweenMouseXAndToolTip:-100,DistanceBetweenMouseYAndToolTip:-20})
             }
         }
     }
     show(x := 0, y := 0)
     {
+        global g_focus_check_timer
         this.ui.gui.show('x' x ' y' y)
         this.show_status := true
         this.draw()  ; 立即绘制，避免白框
+
+        ; 启动焦点检查定时器（每200ms检查一次）
+        g_focus_check_timer := SetTimer(check_focus_and_close, 200)
     }
     hide()
     {
-        global g_is_ime_char, g_is_translating
+        global g_is_ime_char, g_is_translating, g_focus_check_timer
         this.clear()
         this.ui.gui.hide()
         g_is_ime_char := false
         this.show_status := false
         g_is_translating := false  ; 关闭翻译器时重置翻译状态
         OwnzztooltipEnd()
+
+        ; 停止焦点检查定时器
+        if (g_focus_check_timer)
+            SetTimer(g_focus_check_timer, 0)
+        g_focus_check_timer := 0
     }
     move(x, y, w := 0, h := 0)
     {
@@ -652,7 +698,7 @@ class Edit_box
     }
     draw(flag := 0)
     {
-        global g_current_api, g_translators, g_config, g_last_translation
+        global g_current_api, g_translators, g_config, g_last_translation, g_dh
         ui := this.ui
         ui.gui.GetPos(&x, &y, &w, &h)
         logger.info(x, y, w, h)
@@ -667,8 +713,10 @@ class Edit_box
         if (this.text = "")
         {
             g_last_translation := ""
+            ; 获取手柄位置（tooltip固定在手柄上方）
+            g_dh.ui.gui.GetPos(&handle_x, &handle_y)
             display_name := get_current_service_display_name()
-            btt('[' display_name ']', Integer(x), Integer(y) - 45,,OwnzztooltipStyle1,{Transparent:180,DistanceBetweenMouseXAndToolTip:-100,DistanceBetweenMouseYAndToolTip:-20})
+            btt('[' display_name ']', Integer(handle_x), Integer(handle_y) - 45,,OwnzztooltipStyle1,{Transparent:180,DistanceBetweenMouseXAndToolTip:-100,DistanceBetweenMouseYAndToolTip:-20})
         }
         if(ui.BeginDraw())
         {
