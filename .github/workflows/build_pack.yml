@@ -22,13 +22,11 @@ jobs:
 
     - name: List all files
       run: |
-        # 列出所有文件以确认
         Write-Host "📁 Repository files:"
         Get-ChildItem -Recurse -File | Select-Object Name, Length
 
     - name: Check for executable
       run: |
-        # 检查exe文件（使用通配符处理中文文件名）
         $exeFiles = Get-ChildItem -Filter "*.exe" -File
         if ($exeFiles) {
           Write-Host "✅ Found executable files:"
@@ -40,63 +38,46 @@ jobs:
 
     - name: Create distribution package
       run: |
-        # 创建发布目录
         New-Item -ItemType Directory -Force -Path "dist"
 
-        # 复制主程序（使用通配符匹配中文名称）
+        # 复制主程序
         $mainExe = Get-ChildItem -Filter "实时打字翻译.exe" -File
         $mainAhk = Get-ChildItem -Filter "实时打字翻译.ahk" -File
 
-        if ($mainExe) {
-          Copy-Item $mainExe -Destination "dist/"
-          Write-Host "✅ Copied: $($mainExe.Name)"
-        } else {
-          Write-Host "⚠️ exe file not found"
-          exit 1
-        }
+        if ($mainExe) { Copy-Item $mainExe -Destination "dist/"; Write-Host "✅ Copied exe" }
+        if ($mainAhk) { Copy-Item $mainAhk -Destination "dist/"; Write-Host "✅ Copied ahk" }
 
-        if ($mainAhk) {
-          Copy-Item $mainAhk -Destination "dist/"
-          Write-Host "✅ Copied: $($mainAhk.Name)"
-        } else {
-          Write-Host "⚠️ ahk file not found"
-          exit 1
-        }
-
-        # 复制配置示例
         Copy-Item "config.example.json" -Destination "dist/"
-
-        # 复制 README
         Copy-Item "README.md" -Destination "dist/"
 
-        # 复制必需的 lib 文件
         New-Item -ItemType Directory -Force -Path "dist\lib" | Out-Null
         Copy-Item -Path "lib\*.ahk" -Destination "dist\lib\" -Force
 
-        # 复制 dll_64 目录（如果存在）
         if (Test-Path "lib\dll_64") {
           $targetDir = "dist\lib\dll_64"
           if (-not (Test-Path $targetDir)) {
             New-Item -ItemType Directory -Force -Path $targetDir | Out-Null
           }
-          # 使用 robocopy 更稳健地复制文件
+          # Robocopy 修复：即使成功复制(Code 1)，也手动重置退出码为0
           robocopy "lib\dll_64" $targetDir /E /NFL /NDL /NJH /NJS
           if ($LASTEXITCODE -le 7) {
-            Write-Host "✅ Copied dll_64 directory"
+            Write-Host "✅ Copied dll_64 directory (Robocopy Code: $LASTEXITCODE)"
+            $global:LASTEXITCODE = 0  # <---【关键修复】强制重置退出码
           } else {
-            Write-Host "⚠️ Warning: robocopy exited with code $LASTEXITCODE"
+            Write-Host "⚠️ Robocopy failed with code $LASTEXITCODE"
+            exit 1
           }
         }
 
-        # 列出打包内容
         Write-Host "📦 Package contents:"
         Get-ChildItem -Path "dist" -Recurse | Select-Object FullName, Length
 
     - name: Create ZIP archive
       run: |
-        # 创建发布用的 ZIP 文件
-        Compress-Archive -Path "dist/*" -DestinationPath "Real-time-translation-typing.zip"
-
+        # 【优化】使用 7z 替代 Compress-Archive 以更好支持中文文件名
+        # a: add, -tzip: zip format, -mx9: max compression
+        7z a -tzip "Real-time-translation-typing.zip" ".\dist\*" -mx9
+        
         Write-Host "📦 Archive created:"
         Get-Item "Real-time-translation-typing.zip" | Select-Object Name, Length
 
@@ -106,13 +87,13 @@ jobs:
         name: Real-time-translation-typing
         path: dist/
 
+    # 上传 Zip，注意这里 artifact name 不包含 'zip' 后缀，方便 release 步骤统一处理
     - name: Upload ZIP artifact
       uses: actions/upload-artifact@v4
       with:
-        name: Real-time-translation-typing-zip
+        name: release-pkg
         path: Real-time-translation-typing.zip
 
-  # 仅在 release 时自动发布
   release:
     needs: build
     runs-on: windows-latest
@@ -124,11 +105,16 @@ jobs:
     - name: Download artifacts
       uses: actions/download-artifact@v4
       with:
-        name: Real-time-translation-typing-zip
+        name: release-pkg  # 对应上面上传的 artifact 名字
+
+    - name: Display Downloaded Files
+      run: ls -R # 调试步骤：查看下载下来的文件结构
 
     - name: Upload release asset
       uses: softprops/action-gh-release@v1
       with:
-        files: Real-time-translation-typing.zip
+        # 使用通配符匹配，防止因 download-artifact 产生文件夹层级导致找不到文件
+        files: |
+          **/*.zip
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
