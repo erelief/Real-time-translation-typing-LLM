@@ -57,8 +57,7 @@ jobs:
         New-Item -ItemType Directory -Force -Path "dist\lib"
         Copy-Item -Path "lib\*.ahk" -Destination "dist\lib\" -Force
 
-        # 5. 【关键修复】复制 dll_64 文件夹
-        # 注意：这里去掉了星号 *，直接复制文件夹本身
+        # 5. 复制 dll_64 文件夹
         if (Test-Path "lib\dll_64") {
             Copy-Item -Path "lib\dll_64" -Destination "dist\lib" -Recurse -Force
             Write-Host "✅ Copied dll_64 directory"
@@ -70,23 +69,25 @@ jobs:
 
     - name: Create ZIP archive
       run: |
+        # 【修改点】文件名增加了 -LLM
         # 使用 7zip 进行压缩
-        7z a -tzip "Real-time-translation-typing.zip" ".\dist\*" -mx9
+        7z a -tzip "Real-time-translation-typing-LLM.zip" ".\dist\*" -mx9
 
         Write-Host "📦 Archive created:"
-        Get-Item "Real-time-translation-typing.zip" | Select-Object Name, Length
+        Get-Item "Real-time-translation-typing-LLM.zip" | Select-Object Name, Length
 
     - name: Upload build artifact
       uses: actions/upload-artifact@v4
       with:
-        name: Real-time-translation-typing
+        name: Real-time-translation-typing-LLM # 这里 Artifact 名字也顺便改对了
         path: dist/
 
     - name: Upload ZIP artifact
       uses: actions/upload-artifact@v4
       with:
         name: release-pkg
-        path: Real-time-translation-typing.zip
+        # 【修改点】路径匹配新的文件名
+        path: Real-time-translation-typing-LLM.zip
 
   release:
     needs: build
