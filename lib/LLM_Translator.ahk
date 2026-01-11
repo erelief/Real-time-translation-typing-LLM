@@ -52,7 +52,7 @@ class OpenAI_Compat_LLM
             for key, value in headers
                 whr.SetRequestHeader(key, value)
             whr.Send(JSON.Stringify(body))
-            whr.WaitForResponse(10)  ; 10秒超时
+            whr.WaitForResponse(3)  ; 3秒超时（缩短阻塞时间）
 
             ; 记录响应状态
             status := whr.Status

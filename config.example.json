@@ -24,7 +24,7 @@
         "api_key": "your-api-key-here",
         "base_url": "https://your-llm-service.com/v1",
         "model": "your-model-name",
-        "debounce_delay": 500
+        "debounce_delay": 1000
     },
     "service3": {
         "display_name": "本地 Ollama",
@@ -33,6 +33,6 @@
         "api_key": "not-required",
         "base_url": "http://localhost:11434/v1",
         "model": "local-model",
-        "debounce_delay": 800
+        "debounce_delay": 1000
     }
 }

@@ -104,6 +104,9 @@ main()
     ; 保存最后一次翻译结果（用于拖拽时显示）
     global g_last_translation := ""
 
+    ; 翻译状态标志（用于防止翻译未完成时发送）
+    global g_is_translating := false
+
     zmq_version(&a := 0, &b := 0, &c := 0)
     logger.info("版本: ", a, b, c)
     ctx := zmq_ctx_new()
@@ -243,7 +246,11 @@ switch_lol_send_mode(p*)
 
 send_command(p*)
 {
-    global g_window_hwnd, g_dh
+    global g_window_hwnd, g_dh, g_is_translating
+
+    ; 如果正在翻译中，直接返回（不发送）
+    if (g_is_translating)
+        return
     static before_txt := g_eb.text
     try
     {
@@ -329,10 +336,11 @@ fanyi(*)
 {
     global g_cursor_x, g_cursor_y
     global g_window_hwnd, g_eb, g_dh
-    global g_manual_positions, g_last_translation
+    global g_manual_positions, g_last_translation, g_is_translating
 
-    ; 清除上一次的翻译结果
+    ; 清除上一次的翻译结果和状态
     g_last_translation := ""
+    g_is_translating := false
 
     ; 尝试获取光标位置
     if(!(g_window_hwnd := GetCaretPosEx(&x, &y, &w, &h)))
@@ -593,16 +601,33 @@ class Edit_box
     }
     on_change(cd ,text)
     {
+        global g_is_translating
+
+        ; 翻译完成（成功或失败），清除翻译状态
+        g_is_translating := false
+
         logger.info(cd ,text)
         logger.info()
         if(this.show_status && cd = g_current_api)
         {
             this.fanyi_result := text
             global g_last_translation
-            g_last_translation := text  ; 保存翻译结果
-            this.ui.gui.GetPos(&x, &y, &w, &h)
-            display_name := get_current_service_display_name()
-            btt(display_name ':' text, Integer(x), Integer(y) - 45,,OwnzztooltipStyle1,{Transparent:180,DistanceBetweenMouseXAndToolTip:-100,DistanceBetweenMouseYAndToolTip:-20})
+
+            ; 如果翻译结果为空，只显示服务名
+            if (text = "")
+            {
+                g_last_translation := ""
+                this.ui.gui.GetPos(&x, &y, &w, &h)
+                display_name := get_current_service_display_name()
+                btt('[' display_name ']', Integer(x), Integer(y) - 45,,OwnzztooltipStyle1,{Transparent:180,DistanceBetweenMouseXAndToolTip:-100,DistanceBetweenMouseYAndToolTip:-20})
+            }
+            else
+            {
+                g_last_translation := text  ; 保存翻译结果
+                this.ui.gui.GetPos(&x, &y, &w, &h)
+                display_name := get_current_service_display_name()
+                btt(display_name ':' text, Integer(x), Integer(y) - 45,,OwnzztooltipStyle1,{Transparent:180,DistanceBetweenMouseXAndToolTip:-100,DistanceBetweenMouseYAndToolTip:-20})
+            }
         }
     }
     show(x := 0, y := 0)
@@ -613,11 +638,12 @@ class Edit_box
     }
     hide()
     {
-        global g_is_ime_char
+        global g_is_ime_char, g_is_translating
         this.clear()
         this.ui.gui.hide()
         g_is_ime_char := false
         this.show_status := false
+        g_is_translating := false  ; 关闭翻译器时重置翻译状态
         OwnzztooltipEnd()
     }
     move(x, y, w := 0, h := 0)
@@ -626,20 +652,49 @@ class Edit_box
     }
     draw(flag := 0)
     {
-        global g_current_api, g_translators, g_config
+        global g_current_api, g_translators, g_config, g_last_translation
         ui := this.ui
         ui.gui.GetPos(&x, &y, &w, &h)
         logger.info(x, y, w, h)
+
         ;计算文字的大小
         wh := this.ui.GetTextWidthHeight(this.text, 30)
         last_txt_wh := this.ui.GetTextWidthHeight(SubStr(this.text, -this.insert_pos), 30)
         logger.info(wh)
         this.move(x, y, wh.width + 100, wh.height + 100)
+
+        ; 只在输入为空时显示服务名 Tooltip（避免频繁更新）
+        if (this.text = "")
+        {
+            g_last_translation := ""
+            display_name := get_current_service_display_name()
+            btt('[' display_name ']', Integer(x), Integer(y) - 45,,OwnzztooltipStyle1,{Transparent:180,DistanceBetweenMouseXAndToolTip:-100,DistanceBetweenMouseYAndToolTip:-20})
+        }
         if(ui.BeginDraw())
         {
             ui.FillRoundedRectangle(0, 0, wh.width, wh.height, 5, 5, 0xcc1E1E1E)
             ui.DrawRoundedRectangle(0, 0, wh.width, wh.height, 5, 5, 0xffff0000, 1)
-            ui.DrawText(this.text, 0, 0, 30, 0xFFC9E47E)
+
+            ; 分段绘制：空格显示为淡色 ␣，其他字符正常颜色
+            draw_x := 0
+            for char_index, char in StrSplit(this.text, "")
+            {
+                if (char == " ")
+                {
+                    ; 空格显示为淡色 ␣ (50% 透明度)
+                    space_wh := this.ui.GetTextWidthHeight("␣", 30)
+                    ui.DrawText("␣", draw_x, 0, 30, 0x80FFFFFF)
+                    draw_x += space_wh.width
+                }
+                else
+                {
+                    ; 正常字符
+                    char_wh := this.ui.GetTextWidthHeight(char, 30)
+                    ui.DrawText(char, draw_x, 0, 30, 0xFFC9E47E)
+                    draw_x += char_wh.width
+                }
+            }
+
             ui.DrawLine(wh.width - last_txt_wh.width, 0, wh.width - last_txt_wh.width, wh.height, 0xAA00FF00)
             logger.err(this.text)
             ui.EndDraw()
@@ -663,10 +718,13 @@ class Edit_box
     ; 触发翻译
     trigger_translate()
     {
-        global g_translators, g_current_api, g_target_lang
+        global g_translators, g_current_api, g_target_lang, g_is_translating
         input_text := this.text
         if (input_text != "" && g_translators.Has(g_current_api))
         {
+            ; 标记正在翻译
+            g_is_translating := true
+
             ; 设置回调为当前实例
             g_translators[g_current_api].set_callback(this.on_change.bind(this))
             g_translators[g_current_api].translate(input_text, g_target_lang)
