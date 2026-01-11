@@ -70,14 +70,22 @@ jobs:
         Copy-Item "README.md" -Destination "dist/"
 
         # 复制必需的 lib 文件
-        New-Item -ItemType Directory -Force -Path "dist/lib" | Out-Null
-        Copy-Item -Path "lib/*.ahk" -Destination "dist/lib/" -Force
+        New-Item -ItemType Directory -Force -Path "dist\lib" | Out-Null
+        Copy-Item -Path "lib\*.ahk" -Destination "dist\lib\" -Force
 
         # 复制 dll_64 目录（如果存在）
-        if (Test-Path "lib/dll_64") {
-          New-Item -ItemType Directory -Force -Path "dist/lib/dll_64" | Out-Null
-          Copy-Item -Path "lib/dll_64/*" -Destination "dist/lib/dll_64/" -Force -Recurse
-          Write-Host "✅ Copied dll_64 directory"
+        if (Test-Path "lib\dll_64") {
+          $targetDir = "dist\lib\dll_64"
+          if (-not (Test-Path $targetDir)) {
+            New-Item -ItemType Directory -Force -Path $targetDir | Out-Null
+          }
+          # 使用 robocopy 更稳健地复制文件
+          robocopy "lib\dll_64" $targetDir /E /NFL /NDL /NJH /NJS
+          if ($LASTEXITCODE -le 7) {
+            Write-Host "✅ Copied dll_64 directory"
+          } else {
+            Write-Host "⚠️ Warning: robocopy exited with code $LASTEXITCODE"
+          }
         }
 
         # 列出打包内容
