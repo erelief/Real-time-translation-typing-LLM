@@ -73,8 +73,7 @@ jobs:
         New-Item -ItemType Directory -Force -Path "dist/lib"
         Copy-Item -Path "lib/*.ahk" -Destination "dist/lib/"
         if (Test-Path "lib/dll_64") {
-          New-Item -ItemType Directory -Force -Path "dist/lib/dll_64"
-          Copy-Item -Path "lib/dll_64/*" -Destination "dist/lib/dll_64/"
+          Copy-Item -Path "lib/dll_64" -Destination "dist/lib/" -Recurse
         }
 
         # 列出打包内容
