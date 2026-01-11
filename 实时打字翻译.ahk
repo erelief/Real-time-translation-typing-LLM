@@ -924,7 +924,10 @@ class Edit_box
                 if (this.insert_pos > 0 && this.text != "")
                 {
                     ; 从末尾取 insert_pos 个字符
-                    tail_text := SubStr(this.text, -this.insert_pos + 1)
+                    ; insert_pos=0: 光标在最右，tail_text="" (不进入此分支)
+                    ; insert_pos=1: 光标在最后1字符前，tail_text=最后1个字符
+                    ; insert_pos=2: 光标在最后2字符前，tail_text=最后2个字符
+                    tail_text := SubStr(this.text, -this.insert_pos)
                     ; 计算这些字符的实际绘制宽度
                     for char_index, char in StrSplit(tail_text, "")
                     {
@@ -1014,13 +1017,13 @@ class Edit_box
     {
         if(this.insert_pos < StrLen(this.text))
             this.insert_pos += 1
-        this.draw()
+        this.draw(0, false)  ; 只重绘光标位置，不触发翻译
     }
     right()
     {
         if(this.insert_pos > 0)
             this.insert_pos -= 1
-        this.draw()
+        this.draw(0, false)  ; 只重绘光标位置，不触发翻译
     }
     set_imm(char)
     {
