@@ -27,7 +27,7 @@ jobs:
 
     - name: Check for executable
       run: |
-        # 检查exe文件（使用通配符处理中文文件名）
+        # 检查exe文件
         $exeFiles = Get-ChildItem -Filter "*.exe" -File
         if ($exeFiles) {
           Write-Host "✅ Found executable files:"
@@ -42,7 +42,7 @@ jobs:
         # 1. 创建发布根目录
         New-Item -ItemType Directory -Force -Path "dist"
 
-        # 2. 复制主程序（.exe 和 .ahk）
+        # 2. 复制主程序
         $mainExe = Get-ChildItem -Filter "实时打字翻译.exe" -File
         $mainAhk = Get-ChildItem -Filter "实时打字翻译.ahk" -File
 
@@ -58,7 +58,7 @@ jobs:
         Copy-Item -Path "lib\*.ahk" -Destination "dist\lib\" -Force
 
         # 5. 【关键修复】复制 dll_64 文件夹
-        # 逻辑：将 lib\dll_64 文件夹本身复制到 dist\lib 下，系统会自动创建目标文件夹
+        # 注意：这里去掉了星号 *，直接复制文件夹本身
         if (Test-Path "lib\dll_64") {
             Copy-Item -Path "lib\dll_64" -Destination "dist\lib" -Recurse -Force
             Write-Host "✅ Copied dll_64 directory"
@@ -70,8 +70,7 @@ jobs:
 
     - name: Create ZIP archive
       run: |
-        # 使用 7zip 进行压缩，完美支持中文文件名，避免 PowerShell Compress-Archive 的乱码问题
-        # a = add, -tzip = zip format, -mx9 = max compression
+        # 使用 7zip 进行压缩
         7z a -tzip "Real-time-translation-typing.zip" ".\dist\*" -mx9
 
         Write-Host "📦 Archive created:"
@@ -89,7 +88,6 @@ jobs:
         name: release-pkg
         path: Real-time-translation-typing.zip
 
-  # 仅在 release 时自动发布
   release:
     needs: build
     runs-on: windows-latest
@@ -109,7 +107,6 @@ jobs:
     - name: Upload release asset
       uses: softprops/action-gh-release@v1
       with:
-        # 使用 **/*.zip 确保无论文件下载到哪里都能找到
         files: |
           **/*.zip
       env:
