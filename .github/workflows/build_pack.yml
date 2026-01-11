@@ -27,6 +27,7 @@ jobs:
 
     - name: Check for executable
       run: |
+        # 检查exe文件（使用通配符处理中文文件名）
         $exeFiles = Get-ChildItem -Filter "*.exe" -File
         if ($exeFiles) {
           Write-Host "✅ Found executable files:"
@@ -38,46 +39,41 @@ jobs:
 
     - name: Create distribution package
       run: |
+        # 1. 创建发布根目录
         New-Item -ItemType Directory -Force -Path "dist"
 
-        # 复制主程序
+        # 2. 复制主程序（.exe 和 .ahk）
         $mainExe = Get-ChildItem -Filter "实时打字翻译.exe" -File
         $mainAhk = Get-ChildItem -Filter "实时打字翻译.ahk" -File
 
-        if ($mainExe) { Copy-Item $mainExe -Destination "dist/"; Write-Host "✅ Copied exe" }
-        if ($mainAhk) { Copy-Item $mainAhk -Destination "dist/"; Write-Host "✅ Copied ahk" }
+        if ($mainExe) { Copy-Item $mainExe -Destination "dist/" }
+        if ($mainAhk) { Copy-Item $mainAhk -Destination "dist/" }
 
+        # 3. 复制配置和说明
         Copy-Item "config.example.json" -Destination "dist/"
         Copy-Item "README.md" -Destination "dist/"
 
-        New-Item -ItemType Directory -Force -Path "dist\lib" | Out-Null
+        # 4. 创建 lib 目录并复制 .ahk 脚本
+        New-Item -ItemType Directory -Force -Path "dist\lib"
         Copy-Item -Path "lib\*.ahk" -Destination "dist\lib\" -Force
 
+        # 5. 【关键修复】复制 dll_64 文件夹
+        # 逻辑：将 lib\dll_64 文件夹本身复制到 dist\lib 下，系统会自动创建目标文件夹
         if (Test-Path "lib\dll_64") {
-          $targetDir = "dist\lib\dll_64"
-          if (-not (Test-Path $targetDir)) {
-            New-Item -ItemType Directory -Force -Path $targetDir | Out-Null
-          }
-          # Robocopy 修复：即使成功复制(Code 1)，也手动重置退出码为0
-          robocopy "lib\dll_64" $targetDir /E /NFL /NDL /NJH /NJS
-          if ($LASTEXITCODE -le 7) {
-            Write-Host "✅ Copied dll_64 directory (Robocopy Code: $LASTEXITCODE)"
-            $global:LASTEXITCODE = 0  # <---【关键修复】强制重置退出码
-          } else {
-            Write-Host "⚠️ Robocopy failed with code $LASTEXITCODE"
-            exit 1
-          }
+            Copy-Item -Path "lib\dll_64" -Destination "dist\lib" -Recurse -Force
+            Write-Host "✅ Copied dll_64 directory"
         }
 
-        Write-Host "📦 Package contents:"
+        # 6. 列出最终打包内容以供检查
+        Write-Host "📦 Final Package contents:"
         Get-ChildItem -Path "dist" -Recurse | Select-Object FullName, Length
 
     - name: Create ZIP archive
       run: |
-        # 【优化】使用 7z 替代 Compress-Archive 以更好支持中文文件名
-        # a: add, -tzip: zip format, -mx9: max compression
+        # 使用 7zip 进行压缩，完美支持中文文件名，避免 PowerShell Compress-Archive 的乱码问题
+        # a = add, -tzip = zip format, -mx9 = max compression
         7z a -tzip "Real-time-translation-typing.zip" ".\dist\*" -mx9
-        
+
         Write-Host "📦 Archive created:"
         Get-Item "Real-time-translation-typing.zip" | Select-Object Name, Length
 
@@ -87,13 +83,13 @@ jobs:
         name: Real-time-translation-typing
         path: dist/
 
-    # 上传 Zip，注意这里 artifact name 不包含 'zip' 后缀，方便 release 步骤统一处理
     - name: Upload ZIP artifact
       uses: actions/upload-artifact@v4
       with:
         name: release-pkg
         path: Real-time-translation-typing.zip
 
+  # 仅在 release 时自动发布
   release:
     needs: build
     runs-on: windows-latest
@@ -105,15 +101,15 @@ jobs:
     - name: Download artifacts
       uses: actions/download-artifact@v4
       with:
-        name: release-pkg  # 对应上面上传的 artifact 名字
+        name: release-pkg
 
     - name: Display Downloaded Files
-      run: ls -R # 调试步骤：查看下载下来的文件结构
+      run: ls -R
 
     - name: Upload release asset
       uses: softprops/action-gh-release@v1
       with:
-        # 使用通配符匹配，防止因 download-artifact 产生文件夹层级导致找不到文件
+        # 使用 **/*.zip 确保无论文件下载到哪里都能找到
         files: |
           **/*.zip
       env:
