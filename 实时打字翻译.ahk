@@ -113,6 +113,29 @@ switch_translation_mode(*)
     logger.info('已切换到:', g_is_realtime_mode ? "实时翻译模式" : "手动发送模式")
 }
 
+; 统一的翻译器清理函数（由 Edit_box.hide() 调用）
+cleanup_translator()
+{
+    global g_eb, g_dh, g_is_ime_char, g_is_translating, g_translation_completed
+
+    ; 清除输入框内容
+    g_eb.clear()
+    g_eb.fanyi_result := ""
+
+    ; 重置所有状态标志
+    g_is_ime_char := false
+    g_is_translating := false
+    g_translation_completed := false
+
+    ; 清除tooltip
+    OwnzztooltipEnd()
+
+    ; 停止防抖定时器（Edit_box 的定时器）
+    if (g_eb.debounce_timer)
+        SetTimer(g_eb.debounce_timer, 0)
+    g_eb.debounce_timer := 0
+}
+
 ; 检查焦点并自动退出（由定时器调用）
 check_focus_and_close()
 {
@@ -389,13 +412,14 @@ send_command(p*)
     try
     {
         data := g_eb.text
+        translation_result := g_eb.fanyi_result  ; 先保存翻译结果
         g_eb.hide()
         g_dh.hide()  ; 隐藏拖拽框
         old := A_Clipboard
         if(p[1] == 'Primitive')
             A_Clipboard := data
         else
-            A_Clipboard := g_eb.fanyi_result, data := g_eb.fanyi_result
+            A_Clipboard := translation_result, data := translation_result
         if(g_window_hwnd)
         {
             try
@@ -470,12 +494,7 @@ fanyi(*)
 {
     global g_cursor_x, g_cursor_y
     global g_window_hwnd, g_eb, g_dh
-    global g_manual_positions, g_is_translating, g_translation_completed
-
-    ; 清除上一次的翻译结果和状态
-    g_is_translating := false
-    g_translation_completed := false  ; 清除翻译完成状态
-    g_eb.fanyi_result := ""            ; 清除翻译结果
+    global g_manual_positions
 
     ; 尝试获取光标位置
     if(!(g_window_hwnd := GetCaretPosEx(&x, &y, &w, &h)))
@@ -899,23 +918,23 @@ class Edit_box
     }
     hide()
     {
-        global g_is_ime_char, g_is_translating, g_focus_check_timer, g_cursor_blink_timer
-        this.clear()
-        this.ui.gui.hide()
-        g_is_ime_char := false
-        this.show_status := false
-        g_is_translating := false  ; 关闭翻译器时重置翻译状态
-        OwnzztooltipEnd()
+        global g_focus_check_timer, g_cursor_blink_timer
 
-        ; 停止焦点检查定时器
+        ; 隐藏窗口
+        this.ui.gui.hide()
+        this.show_status := false
+
+        ; 停止定时器
         if (g_focus_check_timer)
             SetTimer(g_focus_check_timer, 0)
         g_focus_check_timer := 0
 
-        ; 停止光标闪烁定时器
         if (g_cursor_blink_timer)
             SetTimer(g_cursor_blink_timer, 0)
         g_cursor_blink_timer := 0
+
+        ; 调用统一清理函数（清除内容、状态、tooltip、防抖定时器）
+        cleanup_translator()
     }
     move(x, y, w := 0, h := 0)
     {
