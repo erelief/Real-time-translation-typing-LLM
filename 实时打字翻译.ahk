@@ -190,7 +190,7 @@ main()
     btt('加载中。。。',0, 0,,OwnzztooltipStyle1,{Transparent:180,DistanceBetweenMouseXAndToolTip:-100,DistanceBetweenMouseYAndToolTip:-20})
 
     ; 自动检测并创建配置文件
-    config_path := A_ScriptDir "\config.json"
+    global config_path := A_ScriptDir "\config.json"
     example_config_path := A_ScriptDir "\config.example.json"
     if !FileExist(config_path)
     {
@@ -234,7 +234,21 @@ main()
         ExitApp
     }
 
-    if (g_config.Has("cd") && g_all_api.Has(g_config["cd"]))
+    ; 检查配置的cd是否在启用的模型列表中
+    cd_in_list := false
+    if (g_config.Has("cd"))
+    {
+        for k,v in g_all_api
+        {
+            if (v = g_config["cd"])
+            {
+                cd_in_list := true
+                break
+            }
+        }
+    }
+
+    if (cd_in_list)
     {
         g_current_api := g_config["cd"]
     }
@@ -501,7 +515,7 @@ send_command(p*)
 
 tab_send(*)
 {
-    global g_current_api, g_eb, g_dh
+    global g_current_api, g_eb, g_dh, g_config
     global g_all_api, g_cursor_x, g_cursor_y, g_is_translating, g_translation_completed, g_cancel_translation
 
     ; 如果正在翻译，取消当前翻译
@@ -525,6 +539,10 @@ tab_send(*)
     if(current_index > g_all_api.Length)
         current_index := 1
     g_current_api := g_all_api[current_index]
+
+    ; 保存当前模型到配置（下次启动时恢复）
+    g_config["cd"] := g_current_api
+    saveconfig(g_config, A_ScriptDir "\config.json")
 
     ; 清空翻译状态和结果（切换模型后重新开始）
     g_eb.fanyi_result := ""
@@ -1457,9 +1475,18 @@ loadconfig(&config, json_path)
 ;保存配置函数
 saveconfig(config, json_path)
 {
-    str := JSON.stringify(config, 4)
-    FileDelete(json_path)
-    FileAppend(str, json_path, 'UTF-8')
+    try
+    {
+        str := JSON.stringify(config, 4)
+        FileDelete(json_path)
+        FileAppend(str, json_path, 'UTF-8')
+        return true
+    }
+    catch as e
+    {
+        MsgBox("保存配置失败: " e.Message)
+        return false
+    }
 }
 
 EncodeDecodeURI(str, encode := true, component := true) {
