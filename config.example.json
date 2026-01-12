@@ -8,7 +8,7 @@
         "Model3"
     ],
     "ui_font": {
-        "family": "Arial",
+        "family": "Segoe UI",
         "tooltip_size": 16,
         "input_size": 30
     },
