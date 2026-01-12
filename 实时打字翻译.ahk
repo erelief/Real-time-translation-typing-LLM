@@ -111,7 +111,7 @@ on_global_mouse_click(*)
     }
 }
 
-; 处理Enter键（手动模式：触发翻译/发送；实时模式：直接发送）
+; 处理Enter键（默认模式：触发翻译/发送；实时模式：直接发送）
 handle_enter_key(*)
 {
     global g_is_realtime_mode, g_translation_completed, g_eb, g_is_translating
@@ -127,7 +127,7 @@ handle_enter_key(*)
     }
     else
     {
-        ; 手动模式：
+        ; 默认模式：
         if (!g_translation_completed)
         {
             ; 第一次Enter：触发翻译
@@ -141,7 +141,7 @@ handle_enter_key(*)
     }
 }
 
-; 切换翻译模式（手动/实时）
+; 切换翻译模式（默认/实时）
 switch_translation_mode(*)
 {
     global g_is_realtime_mode, g_config, g_current_api, g_eb, g_dh, g_translation_completed
@@ -164,7 +164,7 @@ switch_translation_mode(*)
         g_eb.draw(0, false)  ; 不触发翻译，只重绘
     }
 
-    logger.info('已切换到:', g_is_realtime_mode ? "实时翻译模式" : "手动发送模式")
+    logger.info('已切换到:', g_is_realtime_mode ? "实时翻译模式" : "默认发送模式")
 }
 
 ; 统一的翻译器清理函数（由 Edit_box.hide() 调用）
@@ -315,9 +315,9 @@ main()
     global g_is_translating := false
     global g_cancel_translation := false  ; 标记当前翻译是否被取消（Tab切换模型时）
 
-    ; 翻译模式控制（手动/实时）
+    ; 翻译模式控制（默认/实时）
     global g_is_realtime_mode := (g_config.Has("translation_mode") && g_config["translation_mode"] == "realtime")
-    global g_translation_completed := false  ; 标记当前翻译是否已完成（手动模式）
+    global g_translation_completed := false  ; 标记当前翻译是否已完成（默认模式）
 
     ; UI字体配置
     global g_ui_font_family := g_config.Has("ui_font") && g_config["ui_font"].Has("family") ? g_config["ui_font"]["family"] : "Arial"
@@ -359,7 +359,7 @@ main()
     Hotkey('~Esc', close_translator) ;退出
     Hotkey('~LButton', on_global_mouse_click) ;全局鼠标点击检测（用于失焦退出）
 	HotIfWinExist("ahk_id " g_eb.ui.hwnd)
-        Hotkey("enter", handle_enter_key) ;手动模式：翻译/发送；实时模式：发送
+        Hotkey("enter", handle_enter_key) ;默认模式：翻译/发送；实时模式：发送
         Hotkey("^enter", (key) => send_command('Primitive')) ;发送原始文本
         Hotkey("~tab", tab_send) ;切换API
         Hotkey("^v", paste) ;粘贴
@@ -794,7 +794,7 @@ ON_MESSAGE_WM_CHAR(wParam, lParam, msg, hwnd)
 
     logger.info(wParam, lParam, num2utf16(wParam))
 
-    ; 手动模式下：字符输入重置翻译状态并更新tooltip
+    ; 默认模式下：字符输入重置翻译状态并更新tooltip
     if (!g_is_realtime_mode && g_translation_completed)
     {
         g_translation_completed := false
@@ -824,7 +824,7 @@ ON_MESSAGE_WM_IME_CHAR(wParam, lParam, msg, hwnd)
 
     g_is_ime_char := true
 
-    ; 手动模式下：中文输入重置翻译状态并更新tooltip
+    ; 默认模式下：中文输入重置翻译状态并更新tooltip
     if (!g_is_realtime_mode && g_translation_completed)
     {
         g_translation_completed := false
@@ -974,7 +974,7 @@ class Edit_box
                 "模型: " api_info["model"] "`n"
                 "API地址: " api_info["base_url"] "`n"
                 "目标语言: " g_target_lang "`n"
-                "翻译模式: " (g_is_realtime_mode ? "实时模式" : "手动模式") "`n`n"
+                "翻译模式: " (g_is_realtime_mode ? "实时模式" : "默认模式") "`n`n"
                 "按 ALT L 可修改目标语言`n"
                 "按 Ctrl F8 可切换翻译模式"
             )
@@ -992,7 +992,7 @@ class Edit_box
         return StrReplace(text, " ", "␣")
     }
 
-    ; 显示翻译中提示（手动模式触发翻译时）
+    ; 显示翻译中提示（默认模式触发翻译时）
     show_translating_tooltip()
     {
         global g_dh
@@ -1020,7 +1020,7 @@ class Edit_box
             return  ; 不显示结果，直接返回
         }
 
-        ; 手动模式：标记翻译已完成
+        ; 默认模式：标记翻译已完成
         if (!g_is_realtime_mode)
         {
             g_translation_completed := true
@@ -1046,7 +1046,7 @@ class Edit_box
             {
                 tooltip_text := '[' display_name ']: ' text
 
-                ; 手动模式 + 翻译完成：添加[↵]
+                ; 默认模式 + 翻译完成：添加[↵]
                 if (!g_is_realtime_mode && g_translation_completed)
                 {
                     tooltip_text .= '[↵]'
