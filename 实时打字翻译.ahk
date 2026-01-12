@@ -174,7 +174,7 @@ cleanup_translator()
 
     ; 清除输入框内容
     g_eb.clear()
-    g_eb.fanyi_result := ""
+    g_eb.translation_result := ""
 
     ; 重置所有状态标志
     g_is_ime_char := false
@@ -344,15 +344,15 @@ main()
     g_dh.hide()
 
 	HotIfWinExist("ahk_class RiotWindowClass")
-        Hotkey('XButton1', (key) => fanyi()) ;打开翻译器
+        Hotkey('XButton1', (key) => open_translator()) ;打开翻译器
         Hotkey('XButton2', (key) => send_command('Primitive')) ;打开翻译器
         Hotkey('!XButton2', (key) => (g_eb.text := '/all ' g_eb.text, send_command('Primitive'))) ;打开翻译器
-        Hotkey('^XButton2', (key) => (g_eb.text := '/all ' g_eb.text, g_eb.fanyi_result := '/all ' g_eb.fanyi_result, send_command(''))) ;打开翻译器
+        Hotkey('^XButton2', (key) => (g_eb.text := '/all ' g_eb.text, g_eb.translation_result := '/all ' g_eb.translation_result, send_command(''))) ;打开翻译器
         Hotkey('+XButton2', (key) => send_command('')) ;打开翻译器
         Hotkey('!f8', (key) => switch_lol_send_mode())
     HotIf()
-    Hotkey('!y', (key) => fanyi()) ;打开翻译器
-    Hotkey('^!y', (key) => fanyi_clipboard()) ;翻译粘贴板文本
+    Hotkey('!y', (key) => open_translator()) ;打开翻译器
+    Hotkey('^!y', (key) => translate_clipboard()) ;翻译粘贴板文本
     Hotkey('^f7', (key) => g_eb.debug()) ;调试
     Hotkey('^f8', (key) => switch_translation_mode()) ;切换翻译模式
     Hotkey('!l', (key) => change_target_language()) ;切换目标语言
@@ -384,9 +384,9 @@ main()
     btt(help_text,0, 0,,OwnzztooltipStyle1,{Transparent:180,DistanceBetweenMouseXAndToolTip:-100,DistanceBetweenMouseYAndToolTip:-20})
 }
 
-fanyi_clipboard(*)
+translate_clipboard(*)
 {
-    fanyi()
+    open_translator()
     g_eb.text := A_Clipboard
     g_eb.draw()
 }
@@ -428,7 +428,7 @@ serpentine_naming(key := 'snake')
     global g_eb
 
     ; 获取翻译结果进行格式转换
-    cd_str := g_eb.fanyi_result
+    cd_str := g_eb.translation_result
 
     ; 转换为小写
     cd_str := StrLower(cd_str)
@@ -452,7 +452,7 @@ serpentine_naming(key := 'snake')
     }
 
     ; 将转换后的结果设置为翻译结果
-    g_eb.fanyi_result := cd_str
+    g_eb.translation_result := cd_str
 
     ; 使用统一的发送命令逻辑（和普通Enter一样）
     send_command('translate')
@@ -460,7 +460,7 @@ serpentine_naming(key := 'snake')
 
 copy(*)
 {
-    A_Clipboard := g_eb.fanyi_result
+    A_Clipboard := g_eb.translation_result
 }
 
 paste(*)
@@ -486,7 +486,7 @@ send_command(p*)
     try
     {
         data := g_eb.text
-        translation_result := g_eb.fanyi_result  ; 先保存翻译结果
+        translation_result := g_eb.translation_result  ; 先保存翻译结果
         g_eb.hide()
         g_dh.hide()  ; 隐藏拖拽框
         old := A_Clipboard
@@ -572,7 +572,7 @@ tab_send(*)
     saveconfig(g_config, A_ScriptDir "\config.json")
 
     ; 清空翻译状态和结果（切换模型后重新开始）
-    g_eb.fanyi_result := ""
+    g_eb.translation_result := ""
     g_translation_completed := false
 
     display_name := get_service_display_with_status()
@@ -595,7 +595,7 @@ tab_send(*)
     g_eb.draw('tab')
 }
 
-fanyi(*)
+open_translator(*)
 {
     global g_cursor_x, g_cursor_y
     global g_window_hwnd, g_eb, g_dh
@@ -696,9 +696,9 @@ DragUpdateTimer()
 
     ; 更新 Tooltip 位置和内容（在手柄右侧，同一行）
     display_name := get_service_display_with_status()
-    if (g_eb.fanyi_result != "")
+    if (g_eb.translation_result != "")
     {
-        show_tooltip_and_update_handle('[' display_name ']: ' g_eb.fanyi_result, x + handle_width, y)
+        show_tooltip_and_update_handle('[' display_name ']: ' g_eb.translation_result, x + handle_width, y)
     }
     else
     {
@@ -800,14 +800,14 @@ ON_MESSAGE_WM_CHAR(wParam, lParam, msg, hwnd)
         g_translation_completed := false
 
         ; 重新显示tooltip，去掉[↵]
-        if (g_eb.fanyi_result != "" && g_dh.show_status)
+        if (g_eb.translation_result != "" && g_dh.show_status)
         {
             g_dh.ui.gui.GetPos(&x, &y)
             handle_width := 30
             display_name := get_service_display_with_status()
 
             ; 重新显示tooltip（不带[↵]）
-            show_tooltip_and_update_handle('[' display_name ']: ' g_eb.fanyi_result, x + handle_width, y)
+            show_tooltip_and_update_handle('[' display_name ']: ' g_eb.translation_result, x + handle_width, y)
         }
     }
 
@@ -830,14 +830,14 @@ ON_MESSAGE_WM_IME_CHAR(wParam, lParam, msg, hwnd)
         g_translation_completed := false
 
         ; 重新显示tooltip，去掉[↵]
-        if (g_eb.fanyi_result != "" && g_dh.show_status)
+        if (g_eb.translation_result != "" && g_dh.show_status)
         {
             g_dh.ui.gui.GetPos(&x, &y)
             handle_width := 30
             display_name := get_service_display_with_status()
 
             ; 重新显示tooltip（不带[↵]）
-            show_tooltip_and_update_handle('[' display_name ']: ' g_eb.fanyi_result, x + handle_width, y)
+            show_tooltip_and_update_handle('[' display_name ']: ' g_eb.translation_result, x + handle_width, y)
         }
     }
 
@@ -941,7 +941,7 @@ class Edit_box
         this.h := h
         this.ui := Direct2DRender(x, y, w, h,,, true)  ; 保持原来的 clickThrough=true，避免白框
         this.text := ''
-        this.fanyi_result := ''
+        this.translation_result := ''
         this.insert_pos := 0 ;距离txt最后边的距离
 
         ; 防抖机制相关
@@ -1030,7 +1030,7 @@ class Edit_box
         logger.info()
         if(this.show_status && cd = g_current_api)
         {
-            this.fanyi_result := text
+            this.translation_result := text
 
             ; 获取手柄位置（tooltip在手柄右侧，同一行）
             g_dh.ui.gui.GetPos(&x, &y)
@@ -1171,7 +1171,7 @@ class Edit_box
             ; 只在输入为空时显示服务名 Tooltip（避免频繁更新）
             if (this.text = "")
             {
-                this.fanyi_result := ""
+                this.translation_result := ""
                 ; 获取手柄位置（tooltip在手柄右侧，同一行）
                 g_dh.ui.gui.GetPos(&handle_x, &handle_y)
                 handle_width := 30
