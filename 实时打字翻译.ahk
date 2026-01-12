@@ -245,6 +245,7 @@ main()
 
     ; 翻译状态标志（用于防止翻译未完成时发送）
     global g_is_translating := false
+    global g_cancel_translation := false  ; 标记当前翻译是否被取消（Tab切换模型时）
 
     ; 翻译模式控制（手动/实时）
     global g_is_realtime_mode := (g_config.Has("translation_mode") && g_config["translation_mode"] == "realtime")
@@ -473,8 +474,16 @@ send_command(p*)
 
 tab_send(*)
 {
-    global g_current_api
-    global g_all_api
+    global g_current_api, g_eb, g_dh
+    global g_all_api, g_cursor_x, g_cursor_y, g_is_translating, g_translation_completed, g_cancel_translation
+
+    ; 如果正在翻译，取消当前翻译
+    if (g_is_translating)
+    {
+        g_cancel_translation := true
+        logger.info(">>> 取消当前翻译，切换模型")
+    }
+
     ;找到当前index
     current_index := 1
     for k,v in g_all_api
@@ -489,9 +498,28 @@ tab_send(*)
     if(current_index > g_all_api.Length)
         current_index := 1
     g_current_api := g_all_api[current_index]
+
+    ; 清空翻译状态和结果（切换模型后重新开始）
+    g_eb.fanyi_result := ""
+    g_translation_completed := false
+
     display_name := get_service_display_with_status()
     logger.info('=========' display_name)
-    btt('[' display_name ']', Integer(g_cursor_x), Integer(g_cursor_y) - 45,,OwnzztooltipStyle1,{Transparent:180,DistanceBetweenMouseXAndToolTip:-100,DistanceBetweenMouseYAndToolTip:-20})
+
+    ; 获取手柄当前位置
+    g_dh.ui.gui.GetPos(&handle_x, &handle_y)
+    handle_width := 30
+
+    ; 使用手柄位置显示tooltip（在手柄右侧，同一行）
+    btt('[' display_name ']', Integer(handle_x + handle_width), Integer(handle_y),,OwnzztooltipStyle1,{Transparent:180,DistanceBetweenMouseXAndToolTip:-100,DistanceBetweenMouseYAndToolTip:-20})
+
+    ; 确保手柄显示（防止在输入过程中丢失）
+    if (!g_dh.show_status)
+    {
+        ; 如果手柄被隐藏了，使用保存的位置重新显示
+        g_dh.show(g_cursor_x, g_cursor_y - 45)
+    }
+
     g_eb.draw('tab')
 }
 
@@ -903,10 +931,18 @@ class Edit_box
 
     on_change(cd ,text)
     {
-        global g_is_translating, g_dh, g_is_realtime_mode, g_translation_completed
+        global g_is_translating, g_dh, g_is_realtime_mode, g_translation_completed, g_cancel_translation, g_current_api
 
         ; 翻译完成（成功或失败），清除翻译状态
         g_is_translating := false
+
+        ; 检查是否被取消（Tab切换模型时）
+        if (g_cancel_translation)
+        {
+            g_cancel_translation := false
+            logger.info(">>> 翻译结果已丢弃（模型已切换）")
+            return  ; 不显示结果，直接返回
+        }
 
         ; 手动模式：标记翻译已完成
         if (!g_is_realtime_mode)
