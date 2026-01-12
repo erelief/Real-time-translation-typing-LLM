@@ -395,12 +395,6 @@ change_target_language(*)
 {
     global g_target_lang, g_config
 
-    ; 获取鼠标位置用于显示tooltip
-    MouseGetPos(&x, &y)
-
-    ; 显示当前语言提示
-    btt('当前目标语言: ' g_target_lang '`n请输入新的目标语言', x, y,,OwnzztooltipStyle1,{Transparent:180,DistanceBetweenMouseXAndToolTip:-100,DistanceBetweenMouseYAndToolTip:-20})
-
     ; 弹出输入框让用户输入新语言
     ib := InputBox('当前目标语言: ' g_target_lang, '设置目标语言', , 'English')
 
@@ -415,8 +409,6 @@ change_target_language(*)
             ; 保存到配置文件
             saveconfig(g_config, A_ScriptDir "\config.json")
 
-            ; 显示确认提示
-            btt('已切换到: ' g_target_lang, x, y,,OwnzztooltipStyle1,{Transparent:180,DistanceBetweenMouseXAndToolTip:-100,DistanceBetweenMouseYAndToolTip:-20})
             logger.info('目标语言已切换到: ' g_target_lang)
         }
     }
