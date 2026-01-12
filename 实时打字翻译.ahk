@@ -311,11 +311,12 @@ main()
         欢迎使用实时打字翻译工具
         ALT Y : 打开翻译器
         ALT L : 修改目标语言
-        ENTER : 手动模式翻译/发送，实时模式发送
+        ENTER （手动模式）: 翻译，在按一次发送
+        ENTER（实时模式） :直接发送
         CTRL ENTER : 发送原始文本
         CTRL F7 : 展示当前API配置
         CTRL F8 : 切换手动/实时翻译模式
-        TAB : 切换API服务
+        TAB : 切换翻译模型
         ESC : 退出
     )'
     btt(help_text,0, 0,,OwnzztooltipStyle1,{Transparent:180,DistanceBetweenMouseXAndToolTip:-100,DistanceBetweenMouseYAndToolTip:-20})

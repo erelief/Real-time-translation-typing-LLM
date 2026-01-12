@@ -1,18 +1,18 @@
 {
     "translation_mode": "manual",
-    "cd": "service1",
+    "cd": "Model1",
     "target_lang": "English",
     "all_api": [
-        "service1",
-        "service2",
-        "service3"
+        "Model1",
+        "Model2",
+        "Model3"
     ],
     "ui_font": {
         "family": "Arial",
         "tooltip_size": 16,
         "input_size": 30
     },
-    "service1": {
+    "Model1": {
         "display_name": "OpenAI GPT",
         "is_open": 1,
         "is_real_time_translate": 1,
@@ -23,8 +23,8 @@
         "temperature": 0.3,
         "max_tokens": 2000
     },
-    "service2": {
-        "display_name": "示例服务",
+    "Model2": {
+        "display_name": "示例模型",
         "is_open": 0,
         "is_real_time_translate": 0,
         "api_key": "your-api-key-here",
@@ -32,7 +32,7 @@
         "model": "your-model-name",
         "debounce_delay": 1000
     },
-    "service3": {
+    "Model3": {
         "display_name": "本地 Ollama",
         "is_open": 0,
         "is_real_time_translate": 0,

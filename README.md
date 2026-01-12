@@ -104,7 +104,7 @@
 * `CTRL ALT ENTER`: 转换为Snake命名 (`variable_name`)
 * `SHIFT ALT ENTER`: 转换为驼峰命名 (`VariableName`)
 * `ESC`: 退出
-* `TAB`: 切换翻译服务
+* `TAB`: 切换翻译模型
 * `CTRL F7`: 显示当前API配置信息
 
 ## 环境要求
@@ -124,11 +124,11 @@
 
 ```json
 {
-    "cd": "service1",
+    "cd": "Model1",
     "target_lang": "English",
-    "all_api": ["service1", "service2"],
+    "all_api": ["Model1", "Model2"],
 
-    "service1": {
+    "Model1": {
         "display_name": "OpenAI GPT",
         "is_open": 1,
         "is_real_time_translate": 1,
@@ -148,11 +148,11 @@
 
 | 配置项 | 说明 | 示例 | 必填 |
 |--------|------|------|------|
-| `cd` | 当前使用的服务配置名 | `"service1"` | ✅ |
+| `cd` | 当前使用的模型配置名 | `"Model1"` | ✅ |
 | `target_lang` | 目标翻译语言 | `"en"` (英语), `"ja"` (日语) 等 | ❌ (默认English) |
-| `all_api` | 所有可用的配置名列表 | `["service1", "service2"]` | ✅ |
-| `display_name` | 服务显示名称（界面显示用） | `"OpenAI GPT"`, `"智谱AI"` | ❌ (默认使用配置名) |
-| `is_open` | 是否启用该服务 | `1` 或 `0` | ✅ |
+| `all_api` | 所有可用的配置名列表 | `["Model1", "Model2"]` | ✅ |
+| `display_name` | 模型显示名称（界面显示用） | `"OpenAI GPT"`, `"智谱AI"` | ❌ (默认使用配置名) |
+| `is_open` | 是否启用该模型 | `1` 或 `0` | ✅ |
 | `is_real_time_translate` | 是否实时翻译 | `1` 或 `0` | ✅ |
 | `api_key` | API密钥 | 从服务获取 | ✅* |
 | `base_url` | API地址（必须为OpenAI兼容格式） | 必须包含`/v1` | ✅ |
@@ -163,19 +163,19 @@
 
 *注：部分本地服务可能不需要API Key，可填任意值
 
-### 添加新服务（只需3步，无需改代码！）
+### 添加新模型（只需3步，无需改代码！）
 
 **前提条件**: 该服务必须提供OpenAI兼容的API接口
 
 **步骤1**: 在 `all_api` 中添加配置名
 ```json
-"all_api": ["service1", "new-service"]
+"all_api": ["Model1", "Model2"]
 ```
 
 **步骤2**: 添加配置块
 ```json
-"new-service": {
-    "display_name": "新服务名称",
+"Model2": {
+    "display_name": "新模型名称",
     "is_open": 1,
     "api_key": "从服务获取的密钥",
     "base_url": "https://api.service-name.com/v1",
@@ -184,14 +184,14 @@
 }
 ```
 
-**步骤3**: 设置为默认服务（可选）
+**步骤3**: 设置为默认模型（可选）
 ```json
-"cd": "new-service"
+"cd": "Model2"
 ```
 
 **完成！** 无需修改任何代码，程序会自动识别并加载。
 
-### 常见服务配置示例
+### 常见模型配置示例
 
 | 服务类型 | base_url示例 | 获取方式 |
 |---------|--------------|----------|
@@ -204,9 +204,9 @@
 - 具体base_url和model名称请参考各服务官方文档
 - 本项目不对任何第三方服务做兼容性保证
 
-### 切换服务
+### 切换模型
 
-按 `TAB` 键循环切换配置中已启用的服务。
+按 `TAB` 键循环切换配置中已启用的模型。
 
 ### 修改目标翻译语言
 
