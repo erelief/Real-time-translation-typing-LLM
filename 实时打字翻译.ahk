@@ -356,15 +356,24 @@ change_target_language(*)
 
 serpentine_naming(key := 'snake')
 {
-    global g_window_hwnd
-    old := A_Clipboard
+    global g_eb
+
+    ; 获取翻译结果进行格式转换
     cd_str := g_eb.fanyi_result
-    g_eb.hide()
+
+    ; 转换为小写
     cd_str := StrLower(cd_str)
+
+    ; 空格替换为下划线
     cd_str := RegExReplace(cd_str, 'i)\s+', '_')
+
+    ; 删除非字母数字下划线字符
     cd_str := RegExReplace(cd_str, "[^A-Za-z0-9_]", "")
+
+    ; 删除首尾下划线
     cd_str := Trim(cd_str, '_')
 
+    ; 驼峰命名转换
     if(key == 'hump')
     {
         ar := StrSplit(cd_str, '_')
@@ -373,17 +382,11 @@ serpentine_naming(key := 'snake')
             cd_str .= StrTitle(v)
     }
 
-    A_Clipboard := cd_str
-    if(g_window_hwnd)
-    {
-        try
-        {
-            WinActivate(g_window_hwnd)
-            WinWaitActive(g_window_hwnd,, 1)
-        }
-    }
-    SendInput('{RShift Down}{Insert}{RShift Up}')
-    Sleep(200)
+    ; 将转换后的结果设置为翻译结果
+    g_eb.fanyi_result := cd_str
+
+    ; 使用统一的发送命令逻辑（和普通Enter一样）
+    send_command('translate')
 }
 
 copy(*)
