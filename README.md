@@ -387,4 +387,4 @@ A: 需要网络连接。可配置本地服务（如Ollama）实现较低延迟�
 
 **项目**: Real-time Translation Typing - LLM Edition
 **版本**: v2.2
-**更新日期**: 2026-01-11
+**更新日期**: 2026-01-12
