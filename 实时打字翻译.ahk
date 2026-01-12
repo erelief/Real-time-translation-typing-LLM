@@ -797,6 +797,7 @@ class DragHandle
 
     draw()
     {
+        global g_ui_font_tooltip_size
         ui := this.ui
         if(ui.BeginDraw())
         {
@@ -808,15 +809,15 @@ class DragHandle
             ui.FillRoundedRectangle(0, 0, width, height, 4, 4, 0xcc2A2A2A)
             ui.DrawRoundedRectangle(0, 0, width, height, 4, 4, 0xFF40C1FF, 1)
 
-            ; 响应式图标设计：图标大小为高度的70%
-            icon_size := Integer(height * 0.7)
+            ; 图标大小基于tooltip字体大小（稍大一点以保持视觉平衡）
+            icon_size := g_ui_font_tooltip_size + 2
             icon_wh := ui.GetTextWidthHeight("≡", icon_size, "Arial")
 
             ; 居中定位
             icon_x := Integer((width - icon_wh.width) / 2)
             icon_y := Integer((height - icon_wh.height) / 2)
 
-            ; 绘制 ≡ 符号（Arial字体，响应式大小和居中位置）
+            ; 绘制 ≡ 符号（Arial字体）
             ui.DrawText('≡', icon_x, icon_y, icon_size, 0xFF40C1FF, "Arial")
 
             ui.EndDraw()
@@ -861,8 +862,9 @@ class Edit_box
         try
         {
             api_info := g_config[g_current_api]
+            display_name := get_current_service_display_name()
             MsgBox(
-                "当前服务: " g_current_api "`n"
+                "当前服务: " display_name " (" g_current_api ")`n"
                 "模型: " api_info["model"] "`n"
                 "API地址: " api_info["base_url"] "`n"
                 "目标语言: " g_target_lang "`n"
