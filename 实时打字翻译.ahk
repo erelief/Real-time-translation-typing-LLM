@@ -501,6 +501,13 @@ fanyi(*)
     global g_window_hwnd, g_eb, g_dh
     global g_manual_positions
 
+    ; 如果翻译器已经显示，先隐藏（防止重复创建窗口）
+    if (g_eb.show_status)
+    {
+        g_eb.hide()
+        g_dh.hide()
+    }
+
     ; 尝试获取光标位置
     if(!(g_window_hwnd := GetCaretPosEx(&x, &y, &w, &h)))
     {
