@@ -225,9 +225,6 @@ main()
     ; 位置记忆相关变量（会话级，按进程名）
     global g_manual_positions := Map()
 
-    ; 保存最后一次翻译结果（用于拖拽时显示）
-    global g_last_translation := ""
-
     ; 翻译状态标志（用于防止翻译未完成时发送）
     global g_is_translating := false
 
@@ -473,10 +470,9 @@ fanyi(*)
 {
     global g_cursor_x, g_cursor_y
     global g_window_hwnd, g_eb, g_dh
-    global g_manual_positions, g_last_translation, g_is_translating, g_translation_completed
+    global g_manual_positions, g_is_translating, g_translation_completed
 
     ; 清除上一次的翻译结果和状态
-    g_last_translation := ""
     g_is_translating := false
     g_translation_completed := false  ; 清除翻译完成状态
     g_eb.fanyi_result := ""            ; 清除翻译结果
@@ -548,7 +544,7 @@ ON_WM_KEYDOWN(wParam, lParam, msg, hwnd)
 ; 拖拽定时器回调：持续更新输入框和 Tooltip 位置
 DragUpdateTimer()
 {
-    global g_dh, g_eb, g_last_translation
+    global g_dh, g_eb
 
     if (!g_dh.is_dragging)
         return
@@ -566,9 +562,9 @@ DragUpdateTimer()
 
     ; 更新 Tooltip 位置和内容（在手柄右侧，同一行）
     display_name := get_service_display_with_status()
-    if (g_last_translation != "")
+    if (g_eb.fanyi_result != "")
     {
-        btt('[' display_name ']: ' g_last_translation, Integer(x + handle_width), Integer(y),,OwnzztooltipStyle1,{Transparent:180,DistanceBetweenMouseXAndToolTip:-100,DistanceBetweenMouseYAndToolTip:-20})
+        btt('[' display_name ']: ' g_eb.fanyi_result, Integer(x + handle_width), Integer(y),,OwnzztooltipStyle1,{Transparent:180,DistanceBetweenMouseXAndToolTip:-100,DistanceBetweenMouseYAndToolTip:-20})
     }
     else
     {
@@ -656,7 +652,7 @@ ON_WM_EXITSIZEMOVE(wParam, lParam, msg, hwnd)
 
 ON_MESSAGE_WM_CHAR(wParam, lParam, msg, hwnd)
 {
-    global g_is_realtime_mode, g_translation_completed, g_dh, g_eb, g_last_translation
+    global g_is_realtime_mode, g_translation_completed, g_dh, g_eb
 
     ; 只处理输入框的消息
     if (hwnd != g_eb.ui.Hwnd)
@@ -677,7 +673,6 @@ ON_MESSAGE_WM_CHAR(wParam, lParam, msg, hwnd)
             display_name := get_service_display_with_status()
 
             ; 重新显示tooltip（不带[↵]）
-            g_last_translation := g_eb.fanyi_result
             btt('[' display_name ']: ' g_eb.fanyi_result, Integer(x + handle_width), Integer(y),,OwnzztooltipStyle1,{Transparent:180,DistanceBetweenMouseXAndToolTip:-100,DistanceBetweenMouseYAndToolTip:-20})
         }
     }
@@ -687,7 +682,7 @@ ON_MESSAGE_WM_CHAR(wParam, lParam, msg, hwnd)
 }
 ON_MESSAGE_WM_IME_CHAR(wParam, lParam, msg, hwnd)
 {
-    global g_is_realtime_mode, g_translation_completed, g_is_ime_char, g_dh, g_eb, g_last_translation
+    global g_is_realtime_mode, g_translation_completed, g_is_ime_char, g_dh, g_eb
 
     ; 只处理输入框的消息
     if (hwnd != g_eb.ui.Hwnd)
@@ -708,7 +703,6 @@ ON_MESSAGE_WM_IME_CHAR(wParam, lParam, msg, hwnd)
             display_name := get_service_display_with_status()
 
             ; 重新显示tooltip（不带[↵]）
-            g_last_translation := g_eb.fanyi_result
             btt('[' display_name ']: ' g_eb.fanyi_result, Integer(x + handle_width), Integer(y),,OwnzztooltipStyle1,{Transparent:180,DistanceBetweenMouseXAndToolTip:-100,DistanceBetweenMouseYAndToolTip:-20})
         }
     }
@@ -863,7 +857,6 @@ class Edit_box
         if(this.show_status && cd = g_current_api)
         {
             this.fanyi_result := text
-            global g_last_translation
 
             ; 获取手柄位置（tooltip在手柄右侧，同一行）
             g_dh.ui.gui.GetPos(&x, &y)
@@ -873,12 +866,10 @@ class Edit_box
             ; 如果翻译结果为空，只显示服务名
             if (text = "")
             {
-                g_last_translation := ""
                 btt('[' display_name ']', Integer(x + handle_width), Integer(y),,OwnzztooltipStyle1,{Transparent:180,DistanceBetweenMouseXAndToolTip:-100,DistanceBetweenMouseYAndToolTip:-20})
             }
             else
             {
-                g_last_translation := text  ; 保存翻译结果
                 tooltip_text := '[' display_name ']: ' text
 
                 ; 手动模式 + 翻译完成：添加[↵]
@@ -983,7 +974,7 @@ class Edit_box
         if (this.is_drawing)
             return
 
-        global g_current_api, g_translators, g_config, g_last_translation, g_dh, g_cursor_visible
+        global g_current_api, g_translators, g_config, g_dh, g_cursor_visible
         ui := this.ui
         ui.gui.GetPos(&x, &y, &w, &h)
         logger.info(x, y, w, h)
@@ -1034,7 +1025,7 @@ class Edit_box
         ; 只在输入为空时显示服务名 Tooltip（避免频繁更新）
         if (this.text = "")
         {
-            g_last_translation := ""
+            this.fanyi_result := ""
             ; 获取手柄位置（tooltip在手柄右侧，同一行）
             g_dh.ui.gui.GetPos(&handle_x, &handle_y)
             handle_width := 30
