@@ -49,6 +49,33 @@ get_service_display_with_status()
     return display_name
 }
 
+; 显示tooltip并自动更新手柄和输入框位置（避免tooltip盖住手柄）
+show_tooltip_and_update_handle(text, x, y)
+{
+    global g_dh, g_eb
+    handle_width := 30
+
+    ; 显示tooltip并获取实际位置（经过边界调整）
+    tooltip_info := btt(text, Integer(x), Integer(y),,OwnzztooltipStyle1,{Transparent:180,DistanceBetweenMouseXAndToolTip:-100,DistanceBetweenMouseYAndToolTip:-20})
+
+    ; 根据tooltip的实际位置更新手柄位置（手柄在tooltip左侧）
+    ; 只更新X坐标，Y坐标保持不变（避免垂直方向跳动）
+    g_dh.ui.gui.GetPos(&current_handle_x, &current_handle_y)
+    new_handle_x := tooltip_info.X - handle_width
+
+    ; 只有当位置真正改变时才移动手柄
+    if (current_handle_x != new_handle_x)
+    {
+        g_dh.ui.gui.Move(new_handle_x, current_handle_y)
+    }
+
+    ; 同时更新输入框位置：在tooltip下方，左对齐tooltip
+    ; 输入框X = tooltip.X，输入框Y = tooltip.Y + tooltip.H
+    g_eb.move(tooltip_info.X, tooltip_info.Y + tooltip_info.H)
+
+    return tooltip_info
+}
+
 ; ESC 退出翻译器（等待按键释放，避免按键传递给其他窗口）
 close_translator(*)
 {
@@ -671,11 +698,11 @@ DragUpdateTimer()
     display_name := get_service_display_with_status()
     if (g_eb.fanyi_result != "")
     {
-        btt('[' display_name ']: ' g_eb.fanyi_result, Integer(x + handle_width), Integer(y),,OwnzztooltipStyle1,{Transparent:180,DistanceBetweenMouseXAndToolTip:-100,DistanceBetweenMouseYAndToolTip:-20})
+        show_tooltip_and_update_handle('[' display_name ']: ' g_eb.fanyi_result, x + handle_width, y)
     }
     else
     {
-        btt('[' display_name ']', Integer(x + handle_width), Integer(y),,OwnzztooltipStyle1,{Transparent:180,DistanceBetweenMouseXAndToolTip:-100,DistanceBetweenMouseYAndToolTip:-20})
+        show_tooltip_and_update_handle('[' display_name ']', x + handle_width, y)
     }
 }
 
@@ -780,7 +807,7 @@ ON_MESSAGE_WM_CHAR(wParam, lParam, msg, hwnd)
             display_name := get_service_display_with_status()
 
             ; 重新显示tooltip（不带[↵]）
-            btt('[' display_name ']: ' g_eb.fanyi_result, Integer(x + handle_width), Integer(y),,OwnzztooltipStyle1,{Transparent:180,DistanceBetweenMouseXAndToolTip:-100,DistanceBetweenMouseYAndToolTip:-20})
+            show_tooltip_and_update_handle('[' display_name ']: ' g_eb.fanyi_result, x + handle_width, y)
         }
     }
 
@@ -810,7 +837,7 @@ ON_MESSAGE_WM_IME_CHAR(wParam, lParam, msg, hwnd)
             display_name := get_service_display_with_status()
 
             ; 重新显示tooltip（不带[↵]）
-            btt('[' display_name ']: ' g_eb.fanyi_result, Integer(x + handle_width), Integer(y),,OwnzztooltipStyle1,{Transparent:180,DistanceBetweenMouseXAndToolTip:-100,DistanceBetweenMouseYAndToolTip:-20})
+            show_tooltip_and_update_handle('[' display_name ']: ' g_eb.fanyi_result, x + handle_width, y)
         }
     }
 
@@ -975,7 +1002,7 @@ class Edit_box
         display_name := get_service_display_with_status()
 
         ; 显示 [✈] 提示
-        btt('[' display_name ']: [✈]', Integer(x + handle_width), Integer(y),,OwnzztooltipStyle1,{Transparent:180,DistanceBetweenMouseXAndToolTip:-100,DistanceBetweenMouseYAndToolTip:-20})
+        show_tooltip_and_update_handle('[' display_name ']: [✈]', x + handle_width, y)
     }
 
     on_change(cd ,text)
@@ -1013,7 +1040,7 @@ class Edit_box
             ; 如果翻译结果为空，只显示服务名
             if (text = "")
             {
-                btt('[' display_name ']', Integer(x + handle_width), Integer(y),,OwnzztooltipStyle1,{Transparent:180,DistanceBetweenMouseXAndToolTip:-100,DistanceBetweenMouseYAndToolTip:-20})
+                show_tooltip_and_update_handle('[' display_name ']', x + handle_width, y)
             }
             else
             {
@@ -1025,7 +1052,7 @@ class Edit_box
                     tooltip_text .= '[↵]'
                 }
 
-                btt(tooltip_text, Integer(x + handle_width), Integer(y),,OwnzztooltipStyle1,{Transparent:180,DistanceBetweenMouseXAndToolTip:-100,DistanceBetweenMouseYAndToolTip:-20})
+                show_tooltip_and_update_handle(tooltip_text, x + handle_width, y)
             }
         }
     }
