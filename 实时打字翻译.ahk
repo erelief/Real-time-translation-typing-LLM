@@ -877,6 +877,14 @@ class Edit_box
             logger.err(e.Message)
         }
     }
+    ; 获取显示文本（将空格替换为␣）
+    get_display_text(text := "")
+    {
+        if (text == "")
+            text := this.text
+        return StrReplace(text, " ", "␣")
+    }
+
     on_change(cd ,text)
     {
         global g_is_translating, g_dh, g_is_realtime_mode, g_translation_completed
@@ -974,31 +982,19 @@ class Edit_box
 
         try
         {
+            ; 获取显示文本（空格替换为␣）
+            display_text := this.get_display_text()
+
             ; 计算文本宽度
-            wh := this.ui.GetTextWidthHeight(this.text, g_ui_font_input_size, g_ui_font_family)
+            wh := this.ui.GetTextWidthHeight(display_text, g_ui_font_input_size, g_ui_font_family)
 
             if(ui.BeginDraw())
             {
                 ui.FillRoundedRectangle(0, 0, wh.width, wh.height, 5, 5, 0xcc1E1E1E)
                 ; ui.DrawRoundedRectangle(0, 0, wh.width, wh.height, 5, 5, 0xffff0000, 1)  ; 红色边框已注释
 
-                ; 只绘制文本，不绘制光标
-                draw_x := 0
-                for char_index, char in StrSplit(this.text, "")
-                {
-                    if (char == " ")
-                    {
-                        space_wh := this.ui.GetTextWidthHeight("␣", g_ui_font_input_size, g_ui_font_family)
-                        ui.DrawText("␣", draw_x, 0, g_ui_font_input_size, 0x80FFFFFF, g_ui_font_family)
-                        draw_x += space_wh.width
-                    }
-                    else
-                    {
-                        char_wh := this.ui.GetTextWidthHeight(char, g_ui_font_input_size, g_ui_font_family)
-                        ui.DrawText(char, draw_x, 0, g_ui_font_input_size, 0xFFC9E47E, g_ui_font_family)
-                        draw_x += char_wh.width
-                    }
-                }
+                ; 统一绘制文本（空格显示为␣，统一颜色）
+                ui.DrawText(display_text, 0, 0, g_ui_font_input_size, 0xFFC9E47E, g_ui_font_family)
                 ui.EndDraw()
             }
         }
@@ -1027,108 +1023,70 @@ class Edit_box
         {
             ; 拖拽时简化绘制，不执行复杂操作
             if (g_dh.is_dragging)
-        {
-            ; 只绘制内容，不执行翻译和 tooltip 更新
-            wh := this.ui.GetTextWidthHeight(this.text, g_ui_font_input_size, g_ui_font_family)
+            {
+                ; 只绘制内容，不执行翻译和 tooltip 更新
+                display_text := this.get_display_text()
+                wh := this.ui.GetTextWidthHeight(display_text, g_ui_font_input_size, g_ui_font_family)
+                if(ui.BeginDraw())
+                {
+                    ui.FillRoundedRectangle(0, 0, wh.width, wh.height, 5, 5, 0xcc1E1E1E)
+                    ; ui.DrawRoundedRectangle(0, 0, wh.width, wh.height, 5, 5, 0xffff0000, 1)  ; 红色边框已注释
+
+                    ; 统一绘制文本（空格显示为␣，统一颜色）
+                    ui.DrawText(display_text, 0, 0, g_ui_font_input_size, 0xFFC9E47E, g_ui_font_family)
+                    ui.EndDraw()
+                }
+                return  ; 拖拽时直接返回，不执行后续的翻译等复杂操作
+            }
+
+            ; 获取显示文本（空格替换为␣）
+            display_text := this.get_display_text()
+
+            ; 计算文字的大小
+            wh := this.ui.GetTextWidthHeight(display_text, g_ui_font_input_size, g_ui_font_family)
+            logger.info(wh)
+            this.move(x, y, wh.width + 100, wh.height + 100)
+
+            ; 只在输入为空时显示服务名 Tooltip（避免频繁更新）
+            if (this.text = "")
+            {
+                this.fanyi_result := ""
+                ; 获取手柄位置（tooltip在手柄右侧，同一行）
+                g_dh.ui.gui.GetPos(&handle_x, &handle_y)
+                handle_width := 30
+                display_name := get_service_display_with_status()
+                btt('[' display_name ']', Integer(handle_x + handle_width), Integer(handle_y),,OwnzztooltipStyle1,{Transparent:180,DistanceBetweenMouseXAndToolTip:-100,DistanceBetweenMouseYAndToolTip:-20})
+            }
             if(ui.BeginDraw())
             {
                 ui.FillRoundedRectangle(0, 0, wh.width, wh.height, 5, 5, 0xcc1E1E1E)
                 ; ui.DrawRoundedRectangle(0, 0, wh.width, wh.height, 5, 5, 0xffff0000, 1)  ; 红色边框已注释
 
-                ; 分段绘制字符（不绘制光标）
-                draw_x := 0
-                for char_index, char in StrSplit(this.text, "")
+                ; 统一绘制文本（空格显示为␣，统一颜色）
+                ui.DrawText(display_text, 0, 0, g_ui_font_input_size, 0xFFC9E47E, g_ui_font_family, "h" wh.height)
+
+                ; 绘制光标（只在有焦点且可见状态时显示）
+                if (g_cursor_visible)
                 {
-                    if (char == " ")
+                    ; 计算末尾 insert_pos 个字符的实际绘制宽度（使用替换后的文本）
+                    tail_width := 0
+                    if (this.insert_pos > 0 && this.text != "")
                     {
-                        space_wh := this.ui.GetTextWidthHeight("␣", g_ui_font_input_size, g_ui_font_family)
-                        ui.DrawText("␣", draw_x, 0, g_ui_font_input_size, 0x80FFFFFF, g_ui_font_family)
-                        draw_x += space_wh.width
+                        ; 从末尾取 insert_pos 个字符并替换空格
+                        tail_text := this.get_display_text(SubStr(this.text, -this.insert_pos))
+                        tail_wh := this.ui.GetTextWidthHeight(tail_text, g_ui_font_input_size, g_ui_font_family)
+                        tail_width := tail_wh.width
                     }
-                    else
-                    {
-                        char_wh := this.ui.GetTextWidthHeight(char, g_ui_font_input_size, g_ui_font_family)
-                        ui.DrawText(char, draw_x, 0, g_ui_font_input_size, 0xFFC9E47E, g_ui_font_family)
-                        draw_x += char_wh.width
-                    }
+
+                    ; 光标位置：实际绘制总宽度 - 末尾字符的实际宽度
+                    cursor_x := wh.width - tail_width
+                    ; 绘制闪烁的竖线光标（2px宽，白色）
+                    ui.DrawLine(cursor_x, 2, cursor_x, wh.height - 2, 0xFFFFFFFF, 2)
                 }
+
+                logger.err(this.text)
                 ui.EndDraw()
             }
-            return  ; 拖拽时直接返回，不执行后续的翻译等复杂操作
-        }
-
-        ;计算文字的大小
-        wh := this.ui.GetTextWidthHeight(this.text, g_ui_font_input_size, g_ui_font_family)
-        last_txt_wh := this.ui.GetTextWidthHeight(SubStr(this.text, -this.insert_pos), g_ui_font_input_size, g_ui_font_family)
-        logger.info(wh)
-        this.move(x, y, wh.width + 100, wh.height + 100)
-
-        ; 只在输入为空时显示服务名 Tooltip（避免频繁更新）
-        if (this.text = "")
-        {
-            this.fanyi_result := ""
-            ; 获取手柄位置（tooltip在手柄右侧，同一行）
-            g_dh.ui.gui.GetPos(&handle_x, &handle_y)
-            handle_width := 30
-            display_name := get_service_display_with_status()
-            btt('[' display_name ']', Integer(handle_x + handle_width), Integer(handle_y),,OwnzztooltipStyle1,{Transparent:180,DistanceBetweenMouseXAndToolTip:-100,DistanceBetweenMouseYAndToolTip:-20})
-        }
-        if(ui.BeginDraw())
-        {
-            ui.FillRoundedRectangle(0, 0, wh.width, wh.height, 5, 5, 0xcc1E1E1E)
-            ; ui.DrawRoundedRectangle(0, 0, wh.width, wh.height, 5, 5, 0xffff0000, 1)  ; 红色边框已注释
-
-            ; 分段绘制：空格显示为淡色 ␣，其他字符正常颜色
-            draw_x := 0
-            for char_index, char in StrSplit(this.text, "")
-            {
-                if (char == " ")
-                {
-                    ; 空格显示为淡色 ␣ (50% 透明度)
-                    space_wh := this.ui.GetTextWidthHeight("␣", g_ui_font_input_size, g_ui_font_family)
-                    ui.DrawText("␣", draw_x, 0, g_ui_font_input_size, 0x80FFFFFF, g_ui_font_family, "h" wh.height)
-                    draw_x += space_wh.width
-                }
-                else
-                {
-                    ; 正常字符
-                    char_wh := this.ui.GetTextWidthHeight(char, g_ui_font_input_size, g_ui_font_family)
-                    ui.DrawText(char, draw_x, 0, g_ui_font_input_size, 0xFFC9E47E, g_ui_font_family, "h" wh.height)
-                    draw_x += char_wh.width
-                }
-            }
-
-            ; 绘制光标（只在有焦点且可见状态时显示）
-            if (g_cursor_visible)
-            {
-                ; 计算末尾 insert_pos 个字符的实际绘制宽度（考虑空格替换为 ␣）
-                tail_width := 0
-                if (this.insert_pos > 0 && this.text != "")
-                {
-                    ; 从末尾取 insert_pos 个字符
-                    ; insert_pos=0: 光标在最右，tail_text="" (不进入此分支)
-                    ; insert_pos=1: 光标在最后1字符前，tail_text=最后1个字符
-                    ; insert_pos=2: 光标在最后2字符前，tail_text=最后2个字符
-                    tail_text := SubStr(this.text, -this.insert_pos)
-                    ; 计算这些字符的实际绘制宽度
-                    for char_index, char in StrSplit(tail_text, "")
-                    {
-                        if (char == " ")
-                            tail_width += this.ui.GetTextWidthHeight("␣", g_ui_font_input_size, g_ui_font_family).width
-                        else
-                            tail_width += this.ui.GetTextWidthHeight(char, g_ui_font_input_size, g_ui_font_family).width
-                    }
-                }
-
-                ; 光标位置：实际绘制总宽度 - 末尾字符的实际宽度
-                cursor_x := draw_x - tail_width
-                ; 绘制闪烁的竖线光标（2px宽，白色）
-                ui.DrawLine(cursor_x, 2, cursor_x, wh.height - 2, 0xFFFFFFFF, 2)
-            }
-
-            logger.err(this.text)
-            ui.EndDraw()
-        }
 
         ; 使用LLM翻译（只有当 trigger_translation 为 true 时才触发）
         if (!trigger_translation)
