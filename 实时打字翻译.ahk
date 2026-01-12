@@ -349,7 +349,7 @@ main()
         Hotkey('!XButton2', (key) => (g_eb.text := '/all ' g_eb.text, send_command('Primitive'))) ;打开翻译器
         Hotkey('^XButton2', (key) => (g_eb.text := '/all ' g_eb.text, g_eb.fanyi_result := '/all ' g_eb.fanyi_result, send_command(''))) ;打开翻译器
         Hotkey('+XButton2', (key) => send_command('')) ;打开翻译器
-        Hotkey('^f8', (key) => switch_lol_send_mode())
+        Hotkey('!f8', (key) => switch_lol_send_mode())
     HotIf()
     Hotkey('!y', (key) => fanyi()) ;打开翻译器
     Hotkey('^!y', (key) => fanyi_clipboard()) ;翻译粘贴板文本
@@ -373,11 +373,11 @@ main()
         欢迎使用实时打字翻译工具
         ALT Y : 打开翻译器
         ALT L : 修改目标语言
-        ENTER (手动模式): 发送翻译请求，再按一次发送
+        ENTER (默认模式): 发送翻译请求，再按一次发送
         ENTER (实时模式):直接发送
         CTRL ENTER : 发送原始文本
         CTRL F7 : 展示当前API配置
-        CTRL F8 : 切换手动/实时翻译模式
+        CTRL F8 : 切换默认/实时翻译模式
         TAB : 切换翻译模型
         ESC : 退出
     )'
