@@ -670,14 +670,37 @@ Class BeautifulToolTip extends Map
       ; 为什么 1920,1080 是错误的呢？因为 1920 是宽度，而坐标起点是0，所以最右边坐标值是 1919，最下面是 1079。
       ;=, hMonitor     := MDMF_FromPoint(DisplayX, DisplayY, MONITOR_DEFAULTTONEAREST:=2)
       , hMonitor     := MDMF_FromPoint(&DisplayX, &DisplayY, MONITOR_DEFAULTTONEAREST:=2)
-      , TargetLeft   := this.Monitors[hMonitor].Left
-      , TargetTop    := this.Monitors[hMonitor].Top
-      , TargetRight  := this.Monitors[hMonitor].Right
-      , TargetBottom := this.Monitors[hMonitor].Bottom
-      , TargetWidth  := TargetRight-TargetLeft
-      , TargetHeight := TargetBottom-TargetTop
+      ; 如果显示器配置发生变化，重新枚举显示器
+      if (!this.Monitors.Has(hMonitor))
+      {
+        this.Monitors := MDMF_Enum()
+        ; 更新 DPI 缩放比例
+        for hMonitorItem, v in this.Monitors.Clone()
+        {
+          if (hMonitorItem="TotalCount" or hMonitorItem="Primary")
+            continue
+          osv := StrSplit(A_OSVersion, ".")
+          if (osv[1] < 6 || (osv[1] == 6 && osv[2] < 3))
+          {
+            hDC  := DllCall("Gdi32.dll\CreateDC", "Str", v.name, "Ptr", 0, "Ptr", 0, "Ptr", 0, "Ptr")
+            dpiX := DllCall("Gdi32.dll\GetDeviceCaps", "Ptr", hDC, "Int", 88)
+            DllCall("Gdi32.dll\DeleteDC", "Ptr", hDC)
+          }
+          else
+            DllCall("Shcore.dll\GetDpiForMonitor", "Ptr", hMonitorItem, "Int", 0, "UIntP", &dpiX:=0, "UIntP", &dpiY:=0, "UInt")
+          this.Monitors[hMonitorItem].DPIScale := this.NonNull_Ret(dpiX, A_ScreenDPI)/96
+        }
+        ; 重新获取当前显示器
+        hMonitor := MDMF_FromPoint(&DisplayX, &DisplayY, MONITOR_DEFAULTTONEAREST:=2)
+      }
+      TargetLeft   := this.Monitors[hMonitor].Left
+      TargetTop    := this.Monitors[hMonitor].Top
+      TargetRight  := this.Monitors[hMonitor].Right
+      TargetBottom := this.Monitors[hMonitor].Bottom
+      TargetWidth  := TargetRight-TargetLeft
+      TargetHeight := TargetBottom-TargetTop
       ; 将对应屏幕的 DPIScale 存入 Options 中。
-      , Options.DPIScale := this.Monitors[hMonitor].DPIScale
+      Options.DPIScale := this.Monitors[hMonitor].DPIScale
     }
       ; 已给出 x和y 或x 或y，都会走到下面3个分支去。
     else if (Options.CoordMode  = "Window" or Options.CoordMode  = "Relative")
@@ -695,7 +718,30 @@ Class BeautifulToolTip extends Map
       , DisplayX     := (X="") ? MouseX : XInScreen
       , DisplayY     := (Y="") ? MouseY : YInScreen
       , hMonitor     := MDMF_FromPoint(&DisplayX, &DisplayY, MONITOR_DEFAULTTONEAREST:=2)
-      , Options.DPIScale := this.Monitors[hMonitor].DPIScale
+      ; 如果显示器配置发生变化，重新枚举显示器
+      if (!this.Monitors.Has(hMonitor))
+      {
+        this.Monitors := MDMF_Enum()
+        ; 更新 DPI 缩放比例
+        for hMonitorItem, v in this.Monitors.Clone()
+        {
+          if (hMonitorItem="TotalCount" or hMonitorItem="Primary")
+            continue
+          osv := StrSplit(A_OSVersion, ".")
+          if (osv[1] < 6 || (osv[1] == 6 && osv[2] < 3))
+          {
+            hDC  := DllCall("Gdi32.dll\CreateDC", "Str", v.name, "Ptr", 0, "Ptr", 0, "Ptr", 0, "Ptr")
+            dpiX := DllCall("Gdi32.dll\GetDeviceCaps", "Ptr", hDC, "Int", 88)
+            DllCall("Gdi32.dll\DeleteDC", "Ptr", hDC)
+          }
+          else
+            DllCall("Shcore.dll\GetDpiForMonitor", "Ptr", hMonitorItem, "Int", 0, "UIntP", &dpiX:=0, "UIntP", &dpiY:=0, "UInt")
+          this.Monitors[hMonitorItem].DPIScale := this.NonNull_Ret(dpiX, A_ScreenDPI)/96
+        }
+        ; 重新获取当前显示器
+        hMonitor := MDMF_FromPoint(&DisplayX, &DisplayY, MONITOR_DEFAULTTONEAREST:=2)
+      }
+      Options.DPIScale := this.Monitors[hMonitor].DPIScale
     }
     else if (Options.CoordMode  = "Client")
     { ; 已给出 x或y 且使用客户区坐标
@@ -718,20 +764,66 @@ Class BeautifulToolTip extends Map
       , DisplayX     := (X="") ? MouseX : XInScreen
       , DisplayY     := (Y="") ? MouseY : YInScreen
       , hMonitor     := MDMF_FromPoint(&DisplayX, &DisplayY, MONITOR_DEFAULTTONEAREST:=2)
-      , Options.DPIScale := this.Monitors[hMonitor].DPIScale
+      ; 如果显示器配置发生变化，重新枚举显示器
+      if (!this.Monitors.Has(hMonitor))
+      {
+        this.Monitors := MDMF_Enum()
+        ; 更新 DPI 缩放比例
+        for hMonitorItem, v in this.Monitors.Clone()
+        {
+          if (hMonitorItem="TotalCount" or hMonitorItem="Primary")
+            continue
+          osv := StrSplit(A_OSVersion, ".")
+          if (osv[1] < 6 || (osv[1] == 6 && osv[2] < 3))
+          {
+            hDC  := DllCall("Gdi32.dll\CreateDC", "Str", v.name, "Ptr", 0, "Ptr", 0, "Ptr", 0, "Ptr")
+            dpiX := DllCall("Gdi32.dll\GetDeviceCaps", "Ptr", hDC, "Int", 88)
+            DllCall("Gdi32.dll\DeleteDC", "Ptr", hDC)
+          }
+          else
+            DllCall("Shcore.dll\GetDpiForMonitor", "Ptr", hMonitorItem, "Int", 0, "UIntP", &dpiX:=0, "UIntP", &dpiY:=0, "UInt")
+          this.Monitors[hMonitorItem].DPIScale := this.NonNull_Ret(dpiX, A_ScreenDPI)/96
+        }
+        ; 重新获取当前显示器
+        hMonitor := MDMF_FromPoint(&DisplayX, &DisplayY, MONITOR_DEFAULTTONEAREST:=2)
+      }
+      Options.DPIScale := this.Monitors[hMonitor].DPIScale
     }
     else ; 这里必然 A_CoordModeToolTip = "Screen"
     { ; 已给出 x或y 且使用屏幕坐标
         DisplayX     := (X="") ? MouseX : X
       , DisplayY     := (Y="") ? MouseY : Y
       , hMonitor     := MDMF_FromPoint(&DisplayX, &DisplayY, MONITOR_DEFAULTTONEAREST:=2)
-      , TargetLeft   := this.Monitors[hMonitor].Left
-      , TargetTop    := this.Monitors[hMonitor].Top
-      , TargetRight  := this.Monitors[hMonitor].Right
-      , TargetBottom := this.Monitors[hMonitor].Bottom
-      , TargetWidth  := TargetRight-TargetLeft
-      , TargetHeight := TargetBottom-TargetTop
-      , Options.DPIScale := this.Monitors[hMonitor].DPIScale
+      ; 如果显示器配置发生变化，重新枚举显示器
+      if (!this.Monitors.Has(hMonitor))
+      {
+        this.Monitors := MDMF_Enum()
+        ; 更新 DPI 缩放比例
+        for hMonitorItem, v in this.Monitors.Clone()
+        {
+          if (hMonitorItem="TotalCount" or hMonitorItem="Primary")
+            continue
+          osv := StrSplit(A_OSVersion, ".")
+          if (osv[1] < 6 || (osv[1] == 6 && osv[2] < 3))
+          {
+            hDC  := DllCall("Gdi32.dll\CreateDC", "Str", v.name, "Ptr", 0, "Ptr", 0, "Ptr", 0, "Ptr")
+            dpiX := DllCall("Gdi32.dll\GetDeviceCaps", "Ptr", hDC, "Int", 88)
+            DllCall("Gdi32.dll\DeleteDC", "Ptr", hDC)
+          }
+          else
+            DllCall("Shcore.dll\GetDpiForMonitor", "Ptr", hMonitorItem, "Int", 0, "UIntP", &dpiX:=0, "UIntP", &dpiY:=0, "UInt")
+          this.Monitors[hMonitorItem].DPIScale := this.NonNull_Ret(dpiX, A_ScreenDPI)/96
+        }
+        ; 重新获取当前显示器
+        hMonitor := MDMF_FromPoint(&DisplayX, &DisplayY, MONITOR_DEFAULTTONEAREST:=2)
+      }
+      TargetLeft   := this.Monitors[hMonitor].Left
+      TargetTop    := this.Monitors[hMonitor].Top
+      TargetRight  := this.Monitors[hMonitor].Right
+      TargetBottom := this.Monitors[hMonitor].Bottom
+      TargetWidth  := TargetRight-TargetLeft
+      TargetHeight := TargetBottom-TargetTop
+      Options.DPIScale := this.Monitors[hMonitor].DPIScale
     }
 
     if (GetTargetSize=1)
