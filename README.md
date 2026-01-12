@@ -127,7 +127,7 @@
     "ui_font": {
         "family": "Segoe UI",
         "tooltip_size": 16,
-        "input_size": 30
+        "input_size": 25
     },
     "Model1": {
         "display_name": "OpenAI GPT",
@@ -136,7 +136,7 @@
         "base_url": "https://api.openai.com/v1",
         "model": "gpt-4o-mini",
         "debounce_delay": 500,
-        "temperature": 0.3,
+        "temperature": 1,
         "max_tokens": 2000
     }
 }
@@ -150,6 +150,9 @@
 |--------|------|------|------|
 | `translation_mode` | 翻译模式（全局） | `"manual"` 或 `"realtime"` | ❌（默认 manual） |
 | `cd` | 当前使用的模型配置名 | `"Model1"` | ❌（默认第一个启用的） |
+| `family` | 字体家族 | `"Segoe UI"` | ❌（默认 Segoe UI） |
+| `tooltip_size` | 翻译结果字体大小 | `16` | ❌（默认 16） |
+| `input_size` | 输入框字体大小 | `25` | ❌（默认 25） |
 | `target_lang` | 目标翻译语言 | `"en"`（英语）, `"ja"`（日语）等 | ❌（默认 English） |
 | `display_name` | 模型显示名称（界面显示用） | `"OpenAI GPT"`, `"智谱 AI"` | ❌（默认使用配置名） |
 | `is_open` | 是否启用该模型（Tab 切换时会跳过） | `1` 或 `0` | ✅ |
@@ -157,7 +160,7 @@
 | `base_url` | API 地址（必须为 OpenAI 兼容格式） | 必须包含 `/v1` | ✅ |
 | `model` | 模型名称 | 按服务文档填写 | ✅ |
 | `debounce_delay` | 防抖延迟（毫秒） | `500` = 停止 0.5 秒后翻译 | ❌（默认 500） |
-| `temperature` | 温度参数 | `0.3` = 更确定性的输出 | ❌（默认 0.3） |
+| `temperature` | 温度参数，参考供应商文档 | `0.5` = 平衡的设置 | ❌（默认 0.5） |
 | `max_tokens` | 最大 token 数 | `2000` | ❌（默认 2000） |
 
 *注：部分本地服务可能不需要 API Key，可填任意值
@@ -175,7 +178,7 @@
     "base_url": "https://api.service-name.com/v1",
     "model": "model-name",
     "debounce_delay": 500,
-    "temperature": 0.7,
+    "temperature": 0.5, 
     "max_tokens": 2000
 }
 ```
