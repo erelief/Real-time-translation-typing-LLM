@@ -1054,7 +1054,7 @@ class Edit_box
         if(ui.BeginDraw())
         {
             ui.FillRoundedRectangle(0, 0, wh.width, wh.height, 5, 5, 0xcc1E1E1E)
-            ui.DrawRoundedRectangle(0, 0, wh.width, wh.height, 5, 5, 0xffff0000, 1)
+            ; ui.DrawRoundedRectangle(0, 0, wh.width, wh.height, 5, 5, 0xffff0000, 1)  ; 红色边框已注释
 
             ; 分段绘制：空格显示为淡色 ␣，其他字符正常颜色
             draw_x := 0
