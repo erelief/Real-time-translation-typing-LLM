@@ -32,6 +32,21 @@ get_current_service_display_name()
     return api_config.Has("display_name") ? api_config["display_name"] : g_current_api
 }
 
+; 获取带状态标识的服务名（实时模式添加⚡）
+get_service_display_with_status()
+{
+    global g_is_realtime_mode
+    display_name := get_current_service_display_name()
+
+    ; 实时模式：添加⚡标识
+    if (g_is_realtime_mode)
+    {
+        return display_name "⚡"
+    }
+
+    return display_name
+}
+
 ; ESC 退出翻译器（等待按键释放，避免按键传递给其他窗口）
 close_translator(*)
 {
@@ -39,6 +54,63 @@ close_translator(*)
     g_eb.hide()
     g_dh.hide()
     KeyWait("Esc")  ; 等待 ESC 释放，阻止按键传递
+}
+
+; 处理Enter键（手动模式：触发翻译/发送；实时模式：直接发送）
+handle_enter_key(*)
+{
+    global g_is_realtime_mode, g_translation_completed, g_eb, g_is_translating
+
+    ; 如果正在翻译中，不允许发送
+    if (g_is_translating)
+        return
+
+    if (g_is_realtime_mode)
+    {
+        ; 实时模式：直接发送结果（当前行为）
+        send_command('translate')
+    }
+    else
+    {
+        ; 手动模式：
+        if (!g_translation_completed)
+        {
+            ; 第一次Enter：触发翻译
+            g_eb.trigger_translate()
+        }
+        else
+        {
+            ; 第二次Enter：发送结果
+            send_command('translate')
+        }
+    }
+}
+
+; 切换翻译模式（手动/实时）
+switch_translation_mode(*)
+{
+    global g_is_realtime_mode, g_config, g_current_api, g_eb, g_dh, g_translation_completed
+
+    ; 切换模式
+    g_is_realtime_mode := !g_is_realtime_mode
+
+    ; 重置翻译状态
+    g_translation_completed := false
+
+    ; 更新配置
+    g_config[g_current_api]["is_real_time_translate"] := g_is_realtime_mode
+    g_config["translation_mode"] := g_is_realtime_mode ? "realtime" : "manual"
+
+    ; 保存配置
+    saveconfig(g_config, A_ScriptDir "\config.json")
+
+    ; 重新绘制tooltip以更新⚡标识
+    if (g_eb.show_status)
+    {
+        g_eb.draw(0, false)  ; 不触发翻译，只重绘
+    }
+
+    logger.info('已切换到:', g_is_realtime_mode ? "实时翻译模式" : "手动发送模式")
 }
 
 ; 检查焦点并自动退出（由定时器调用）
@@ -159,6 +231,10 @@ main()
     ; 翻译状态标志（用于防止翻译未完成时发送）
     global g_is_translating := false
 
+    ; 翻译模式控制（手动/实时）
+    global g_is_realtime_mode := (g_config.Has("translation_mode") && g_config["translation_mode"] == "realtime")
+    global g_translation_completed := false  ; 标记当前翻译是否已完成（手动模式）
+
     ; 焦点检查定时器（用于检测点击其他地方自动退出）
     global g_focus_check_timer := 0
 
@@ -189,10 +265,11 @@ main()
     Hotkey('!y', (key) => fanyi()) ;打开翻译器
     Hotkey('^!y', (key) => fanyi_clipboard()) ;翻译粘贴板文本
     Hotkey('^f7', (key) => g_eb.debug()) ;调试
+    Hotkey('^f8', (key) => switch_translation_mode()) ;切换翻译模式
     Hotkey('!l', (key) => change_target_language()) ;切换目标语言
     Hotkey('~Esc', close_translator) ;退出
 	HotIfWinExist("ahk_id " g_eb.ui.hwnd)
-        Hotkey("enter", (key) => send_command('translate')) ;发送文本
+        Hotkey("enter", handle_enter_key) ;手动模式：翻译/发送；实时模式：发送
         Hotkey("^enter", (key) => send_command('Primitive')) ;发送原始文本
         Hotkey("~tab", tab_send) ;切换API
         Hotkey("^v", paste) ;粘贴
@@ -206,9 +283,10 @@ main()
         欢迎使用实时打字翻译工具
         ALT Y : 打开翻译器
         ALT L : 修改目标语言
-        ENTER : 发送结果
+        ENTER : 手动模式翻译/发送，实时模式发送
         CTRL ENTER : 发送原始文本
         CTRL F7 : 展示当前API配置
+        CTRL F8 : 切换手动/实时翻译模式
         TAB : 切换API服务
         ESC : 退出
     )'
@@ -385,7 +463,7 @@ tab_send(*)
     if(current_index > g_all_api.Length)
         current_index := 1
     g_current_api := g_all_api[current_index]
-    display_name := get_current_service_display_name()
+    display_name := get_service_display_with_status()
     logger.info('=========' display_name)
     btt('[' display_name ']', Integer(g_cursor_x), Integer(g_cursor_y) - 45,,OwnzztooltipStyle1,{Transparent:180,DistanceBetweenMouseXAndToolTip:-100,DistanceBetweenMouseYAndToolTip:-20})
     g_eb.draw('tab')
@@ -395,11 +473,13 @@ fanyi(*)
 {
     global g_cursor_x, g_cursor_y
     global g_window_hwnd, g_eb, g_dh
-    global g_manual_positions, g_last_translation, g_is_translating
+    global g_manual_positions, g_last_translation, g_is_translating, g_translation_completed
 
     ; 清除上一次的翻译结果和状态
     g_last_translation := ""
     g_is_translating := false
+    g_translation_completed := false  ; 清除翻译完成状态
+    g_eb.fanyi_result := ""            ; 清除翻译结果
 
     ; 尝试获取光标位置
     if(!(g_window_hwnd := GetCaretPosEx(&x, &y, &w, &h)))
@@ -434,7 +514,7 @@ fanyi(*)
     tooltip_y := y - 45
 
     ; 显示 Tooltip（在手柄右侧，同一行）并获取实际高度
-    display_name := get_current_service_display_name()
+    display_name := get_service_display_with_status()
     tooltip_info := btt('[' display_name ']', Integer(x + handle_width), Integer(tooltip_y),,OwnzztooltipStyle1,{Transparent:180,DistanceBetweenMouseXAndToolTip:-100,DistanceBetweenMouseYAndToolTip:-20})
 
     ; 获取tooltip的实际高度
@@ -446,12 +526,21 @@ fanyi(*)
     ; 显示输入框（在tooltip下方，左对齐tooltip）
     g_eb.show(x + handle_width, y)
 }
-ON_WM_KEYDOWN(a*)
+ON_WM_KEYDOWN(wParam, lParam, msg, hwnd)
 {
-    if(a[1] == 37)
+    ; 只处理输入框的消息
+    if (hwnd != g_eb.ui.Hwnd)
+        return
+
+    ; VK_LEFT = 37, VK_RIGHT = 39
+    if (wParam == 37)
+    {
         g_eb.left()
-    else if(a[1] == 39)
+    }
+    else if (wParam == 39)
+    {
         g_eb.right()
+    }
 }
 
 ; ========== 鼠标拖拽相关函数 ==========
@@ -476,7 +565,7 @@ DragUpdateTimer()
     g_eb.move(x + handle_width, y + 45)
 
     ; 更新 Tooltip 位置和内容（在手柄右侧，同一行）
-    display_name := get_current_service_display_name()
+    display_name := get_service_display_with_status()
     if (g_last_translation != "")
     {
         btt('[' display_name ']: ' g_last_translation, Integer(x + handle_width), Integer(y),,OwnzztooltipStyle1,{Transparent:180,DistanceBetweenMouseXAndToolTip:-100,DistanceBetweenMouseYAndToolTip:-20})
@@ -565,20 +654,67 @@ ON_WM_EXITSIZEMOVE(wParam, lParam, msg, hwnd)
     logger.info(">>> 拖拽结束，保存位置:", process_name, x, y)
 }
 
-ON_MESSAGE_WM_CHAR(a*)
+ON_MESSAGE_WM_CHAR(wParam, lParam, msg, hwnd)
 {
-    logger.info(a*)
-    logger.info(num2utf16(a[1]))
-    if(a[2] != 1)
-        g_eb.set_imm(a[1])
+    global g_is_realtime_mode, g_translation_completed, g_dh, g_eb, g_last_translation
+
+    ; 只处理输入框的消息
+    if (hwnd != g_eb.ui.Hwnd)
+        return
+
+    logger.info(wParam, lParam, num2utf16(wParam))
+
+    ; 手动模式下：字符输入重置翻译状态并更新tooltip
+    if (!g_is_realtime_mode && g_translation_completed)
+    {
+        g_translation_completed := false
+
+        ; 重新显示tooltip，去掉[↵]
+        if (g_eb.fanyi_result != "" && g_dh.show_status)
+        {
+            g_dh.ui.gui.GetPos(&x, &y)
+            handle_width := 30
+            display_name := get_service_display_with_status()
+
+            ; 重新显示tooltip（不带[↵]）
+            g_last_translation := g_eb.fanyi_result
+            btt('[' display_name ']: ' g_eb.fanyi_result, Integer(x + handle_width), Integer(y),,OwnzztooltipStyle1,{Transparent:180,DistanceBetweenMouseXAndToolTip:-100,DistanceBetweenMouseYAndToolTip:-20})
+        }
+    }
+
+    if (lParam != 1)
+        g_eb.set_imm(wParam)
 }
-ON_MESSAGE_WM_IME_CHAR(a*)
+ON_MESSAGE_WM_IME_CHAR(wParam, lParam, msg, hwnd)
 {
-    global g_is_ime_char
+    global g_is_realtime_mode, g_translation_completed, g_is_ime_char, g_dh, g_eb, g_last_translation
+
+    ; 只处理输入框的消息
+    if (hwnd != g_eb.ui.Hwnd)
+        return
+
     g_is_ime_char := true
-    logger.info(a*)
-    logger.info(num2utf16(a[1]))
-    g_eb.set_imm(a[1])
+
+    ; 手动模式下：中文输入重置翻译状态并更新tooltip
+    if (!g_is_realtime_mode && g_translation_completed)
+    {
+        g_translation_completed := false
+
+        ; 重新显示tooltip，去掉[↵]
+        if (g_eb.fanyi_result != "" && g_dh.show_status)
+        {
+            g_dh.ui.gui.GetPos(&x, &y)
+            handle_width := 30
+            display_name := get_service_display_with_status()
+
+            ; 重新显示tooltip（不带[↵]）
+            g_last_translation := g_eb.fanyi_result
+            btt('[' display_name ']: ' g_eb.fanyi_result, Integer(x + handle_width), Integer(y),,OwnzztooltipStyle1,{Transparent:180,DistanceBetweenMouseXAndToolTip:-100,DistanceBetweenMouseYAndToolTip:-20})
+        }
+    }
+
+    logger.info(wParam, lParam, num2utf16(wParam))
+    g_eb.set_imm(wParam)
 }
 
 ; ========== 拖拽手柄类 ==========
@@ -711,10 +847,16 @@ class Edit_box
     }
     on_change(cd ,text)
     {
-        global g_is_translating, g_dh
+        global g_is_translating, g_dh, g_is_realtime_mode, g_translation_completed
 
         ; 翻译完成（成功或失败），清除翻译状态
         g_is_translating := false
+
+        ; 手动模式：标记翻译已完成
+        if (!g_is_realtime_mode)
+        {
+            g_translation_completed := true
+        }
 
         logger.info(cd ,text)
         logger.info()
@@ -726,7 +868,7 @@ class Edit_box
             ; 获取手柄位置（tooltip在手柄右侧，同一行）
             g_dh.ui.gui.GetPos(&x, &y)
             handle_width := 30
-            display_name := get_current_service_display_name()
+            display_name := get_service_display_with_status()
 
             ; 如果翻译结果为空，只显示服务名
             if (text = "")
@@ -737,7 +879,15 @@ class Edit_box
             else
             {
                 g_last_translation := text  ; 保存翻译结果
-                btt('[' display_name ']: ' text, Integer(x + handle_width), Integer(y),,OwnzztooltipStyle1,{Transparent:180,DistanceBetweenMouseXAndToolTip:-100,DistanceBetweenMouseYAndToolTip:-20})
+                tooltip_text := '[' display_name ']: ' text
+
+                ; 手动模式 + 翻译完成：添加[↵]
+                if (!g_is_realtime_mode && g_translation_completed)
+                {
+                    tooltip_text .= '[↵]'
+                }
+
+                btt(tooltip_text, Integer(x + handle_width), Integer(y),,OwnzztooltipStyle1,{Transparent:180,DistanceBetweenMouseXAndToolTip:-100,DistanceBetweenMouseYAndToolTip:-20})
             }
         }
     }
@@ -888,7 +1038,7 @@ class Edit_box
             ; 获取手柄位置（tooltip在手柄右侧，同一行）
             g_dh.ui.gui.GetPos(&handle_x, &handle_y)
             handle_width := 30
-            display_name := get_current_service_display_name()
+            display_name := get_service_display_with_status()
             btt('[' display_name ']', Integer(handle_x + handle_width), Integer(handle_y),,OwnzztooltipStyle1,{Transparent:180,DistanceBetweenMouseXAndToolTip:-100,DistanceBetweenMouseYAndToolTip:-20})
         }
         if(ui.BeginDraw())
@@ -953,10 +1103,10 @@ class Edit_box
             return  ; 光标闪烁等场景不需要触发翻译
 
         input_text := this.text
-        api_config := g_config[g_current_api]
 
-        ; 检查是否启用实时翻译
-        if (api_config["is_real_time_translate"] && input_text != "")
+        ; 检查是否启用实时翻译（使用全局模式变量）
+        global g_is_realtime_mode
+        if (g_is_realtime_mode && input_text != "")
         {
             ; 防抖处理：取消之前的定时器，重新计时
             if (this.debounce_timer)
