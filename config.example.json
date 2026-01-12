@@ -1,4 +1,5 @@
 {
+    "translation_mode": "manual",
     "cd": "service1",
     "target_lang": "English",
     "all_api": [
@@ -6,6 +7,11 @@
         "service2",
         "service3"
     ],
+    "ui_font": {
+        "family": "Arial",
+        "tooltip_size": 16,
+        "input_size": 30
+    },
     "service1": {
         "display_name": "OpenAI GPT",
         "is_open": 1,

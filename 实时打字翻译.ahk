@@ -255,6 +255,14 @@ main()
     global g_is_realtime_mode := (g_config.Has("translation_mode") && g_config["translation_mode"] == "realtime")
     global g_translation_completed := false  ; 标记当前翻译是否已完成（手动模式）
 
+    ; UI字体配置
+    global g_ui_font_family := g_config.Has("ui_font") && g_config["ui_font"].Has("family") ? g_config["ui_font"]["family"] : "Arial"
+    global g_ui_font_tooltip_size := g_config.Has("ui_font") && g_config["ui_font"].Has("tooltip_size") ? g_config["ui_font"]["tooltip_size"] : 16
+    global g_ui_font_input_size := g_config.Has("ui_font") && g_config["ui_font"].Has("input_size") ? g_config["ui_font"]["input_size"] : 30
+
+    ; 更新 tooltip 样式字体大小
+    OwnzztooltipStyle1.FontSize := g_ui_font_tooltip_size
+
     ; 焦点检查定时器（用于检测点击其他地方自动退出）
     global g_focus_check_timer := 0
 
@@ -799,8 +807,16 @@ class DragHandle
             ui.FillRoundedRectangle(0, 0, width, height, 4, 4, 0xcc2A2A2A)
             ui.DrawRoundedRectangle(0, 0, width, height, 4, 4, 0xFF40C1FF, 1)
 
-            ; 绘制 ≡ 符号（居中，使用实际字体大小24）
-            ui.DrawText('≡', 3, 4, 24, 0xFF40C1FF)
+            ; 响应式图标设计：图标大小为高度的70%
+            icon_size := Integer(height * 0.7)
+            icon_wh := ui.GetTextWidthHeight("≡", icon_size, "Arial")
+
+            ; 居中定位
+            icon_x := Integer((width - icon_wh.width) / 2)
+            icon_y := Integer((height - icon_wh.height) / 2)
+
+            ; 绘制 ≡ 符号（Arial字体，响应式大小和居中位置）
+            ui.DrawText('≡', icon_x, icon_y, icon_size, 0xFF40C1FF, "Arial")
 
             ui.EndDraw()
         }
@@ -951,15 +967,17 @@ class Edit_box
         ui := this.ui
         this.is_drawing := true
 
+        global g_ui_font_family, g_ui_font_input_size
+
         try
         {
             ; 计算文本宽度
-            wh := this.ui.GetTextWidthHeight(this.text, 30)
+            wh := this.ui.GetTextWidthHeight(this.text, g_ui_font_input_size, g_ui_font_family)
 
             if(ui.BeginDraw())
             {
                 ui.FillRoundedRectangle(0, 0, wh.width, wh.height, 5, 5, 0xcc1E1E1E)
-                ui.DrawRoundedRectangle(0, 0, wh.width, wh.height, 5, 5, 0xffff0000, 1)
+                ; ui.DrawRoundedRectangle(0, 0, wh.width, wh.height, 5, 5, 0xffff0000, 1)  ; 红色边框已注释
 
                 ; 只绘制文本，不绘制光标
                 draw_x := 0
@@ -967,14 +985,14 @@ class Edit_box
                 {
                     if (char == " ")
                     {
-                        space_wh := this.ui.GetTextWidthHeight("␣", 30)
-                        ui.DrawText("␣", draw_x, 0, 30, 0x80FFFFFF)
+                        space_wh := this.ui.GetTextWidthHeight("␣", g_ui_font_input_size, g_ui_font_family)
+                        ui.DrawText("␣", draw_x, 0, g_ui_font_input_size, 0x80FFFFFF, g_ui_font_family)
                         draw_x += space_wh.width
                     }
                     else
                     {
-                        char_wh := this.ui.GetTextWidthHeight(char, 30)
-                        ui.DrawText(char, draw_x, 0, 30, 0xFFC9E47E)
+                        char_wh := this.ui.GetTextWidthHeight(char, g_ui_font_input_size, g_ui_font_family)
+                        ui.DrawText(char, draw_x, 0, g_ui_font_input_size, 0xFFC9E47E, g_ui_font_family)
                         draw_x += char_wh.width
                     }
                 }
@@ -994,6 +1012,7 @@ class Edit_box
             return
 
         global g_current_api, g_translators, g_config, g_dh, g_cursor_visible
+        global g_ui_font_family, g_ui_font_input_size
         ui := this.ui
         ui.gui.GetPos(&x, &y, &w, &h)
         logger.info(x, y, w, h)
@@ -1007,11 +1026,11 @@ class Edit_box
             if (g_dh.is_dragging)
         {
             ; 只绘制内容，不执行翻译和 tooltip 更新
-            wh := this.ui.GetTextWidthHeight(this.text, 30)
+            wh := this.ui.GetTextWidthHeight(this.text, g_ui_font_input_size, g_ui_font_family)
             if(ui.BeginDraw())
             {
                 ui.FillRoundedRectangle(0, 0, wh.width, wh.height, 5, 5, 0xcc1E1E1E)
-                ui.DrawRoundedRectangle(0, 0, wh.width, wh.height, 5, 5, 0xffff0000, 1)
+                ; ui.DrawRoundedRectangle(0, 0, wh.width, wh.height, 5, 5, 0xffff0000, 1)  ; 红色边框已注释
 
                 ; 分段绘制字符（不绘制光标）
                 draw_x := 0
@@ -1019,14 +1038,14 @@ class Edit_box
                 {
                     if (char == " ")
                     {
-                        space_wh := this.ui.GetTextWidthHeight("␣", 30)
-                        ui.DrawText("␣", draw_x, 0, 30, 0x80FFFFFF)
+                        space_wh := this.ui.GetTextWidthHeight("␣", g_ui_font_input_size, g_ui_font_family)
+                        ui.DrawText("␣", draw_x, 0, g_ui_font_input_size, 0x80FFFFFF, g_ui_font_family)
                         draw_x += space_wh.width
                     }
                     else
                     {
-                        char_wh := this.ui.GetTextWidthHeight(char, 30)
-                        ui.DrawText(char, draw_x, 0, 30, 0xFFC9E47E)
+                        char_wh := this.ui.GetTextWidthHeight(char, g_ui_font_input_size, g_ui_font_family)
+                        ui.DrawText(char, draw_x, 0, g_ui_font_input_size, 0xFFC9E47E, g_ui_font_family)
                         draw_x += char_wh.width
                     }
                 }
@@ -1036,8 +1055,8 @@ class Edit_box
         }
 
         ;计算文字的大小
-        wh := this.ui.GetTextWidthHeight(this.text, 30)
-        last_txt_wh := this.ui.GetTextWidthHeight(SubStr(this.text, -this.insert_pos), 30)
+        wh := this.ui.GetTextWidthHeight(this.text, g_ui_font_input_size, g_ui_font_family)
+        last_txt_wh := this.ui.GetTextWidthHeight(SubStr(this.text, -this.insert_pos), g_ui_font_input_size, g_ui_font_family)
         logger.info(wh)
         this.move(x, y, wh.width + 100, wh.height + 100)
 
@@ -1063,15 +1082,15 @@ class Edit_box
                 if (char == " ")
                 {
                     ; 空格显示为淡色 ␣ (50% 透明度)
-                    space_wh := this.ui.GetTextWidthHeight("␣", 30)
-                    ui.DrawText("␣", draw_x, 0, 30, 0x80FFFFFF)
+                    space_wh := this.ui.GetTextWidthHeight("␣", g_ui_font_input_size, g_ui_font_family)
+                    ui.DrawText("␣", draw_x, 0, g_ui_font_input_size, 0x80FFFFFF, g_ui_font_family, "h" wh.height)
                     draw_x += space_wh.width
                 }
                 else
                 {
                     ; 正常字符
-                    char_wh := this.ui.GetTextWidthHeight(char, 30)
-                    ui.DrawText(char, draw_x, 0, 30, 0xFFC9E47E)
+                    char_wh := this.ui.GetTextWidthHeight(char, g_ui_font_input_size, g_ui_font_family)
+                    ui.DrawText(char, draw_x, 0, g_ui_font_input_size, 0xFFC9E47E, g_ui_font_family, "h" wh.height)
                     draw_x += char_wh.width
                 }
             }
@@ -1092,9 +1111,9 @@ class Edit_box
                     for char_index, char in StrSplit(tail_text, "")
                     {
                         if (char == " ")
-                            tail_width += this.ui.GetTextWidthHeight("␣", 30).width
+                            tail_width += this.ui.GetTextWidthHeight("␣", g_ui_font_input_size, g_ui_font_family).width
                         else
-                            tail_width += this.ui.GetTextWidthHeight(char, 30).width
+                            tail_width += this.ui.GetTextWidthHeight(char, g_ui_font_input_size, g_ui_font_family).width
                     }
                 }
 
