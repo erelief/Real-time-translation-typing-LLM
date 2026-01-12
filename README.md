@@ -97,7 +97,7 @@
 ### 通用快捷键
 * `ALT Y`: 打开翻译器
 * `ALT L`: 修改目标翻译语言
-* `ENTER`: 输出翻译文本
+* `ENTER`: 输出翻译文本（手动模式：第一次翻译，第二次发送；实时模式：直接发送）
 * `CTRL ENTER`: 输出原始文本
 * `CTRL C`: 复制翻译结果
 * `CTRL V`: 粘贴剪贴板内容
@@ -106,6 +106,7 @@
 * `ESC`: 退出
 * `TAB`: 切换翻译模型
 * `CTRL F7`: 显示当前API配置信息
+* `CTRL F8`: 切换翻译模式（手动/实时）
 
 ## 环境要求
 
@@ -124,14 +125,17 @@
 
 ```json
 {
+    "translation_mode": "manual",
     "cd": "Model1",
     "target_lang": "English",
-    "all_api": ["Model1", "Model2"],
-
+    "ui_font": {
+        "family": "Segoe UI",
+        "tooltip_size": 16,
+        "input_size": 30
+    },
     "Model1": {
         "display_name": "OpenAI GPT",
         "is_open": 1,
-        "is_real_time_translate": 1,
         "api_key": "sk-你的API密钥",
         "base_url": "https://api.openai.com/v1",
         "model": "gpt-4o-mini",
@@ -148,12 +152,11 @@
 
 | 配置项 | 说明 | 示例 | 必填 |
 |--------|------|------|------|
-| `cd` | 当前使用的模型配置名 | `"Model1"` | ✅ |
+| `translation_mode` | 翻译模式（全局） | `"manual"` 或 `"realtime"` | ❌ (默认manual) |
+| `cd` | 当前使用的模型配置名 | `"Model1"` | ❌ (默认第一个启用的) |
 | `target_lang` | 目标翻译语言 | `"en"` (英语), `"ja"` (日语) 等 | ❌ (默认English) |
-| `all_api` | 所有可用的配置名列表 | `["Model1", "Model2"]` | ✅ |
 | `display_name` | 模型显示名称（界面显示用） | `"OpenAI GPT"`, `"智谱AI"` | ❌ (默认使用配置名) |
-| `is_open` | 是否启用该模型 | `1` 或 `0` | ✅ |
-| `is_real_time_translate` | 是否实时翻译 | `1` 或 `0` | ✅ |
+| `is_open` | 是否启用该模型（Tab切换时会跳过） | `1` 或 `0` | ✅ |
 | `api_key` | API密钥 | 从服务获取 | ✅* |
 | `base_url` | API地址（必须为OpenAI兼容格式） | 必须包含`/v1` | ✅ |
 | `model` | 模型名称 | 按服务文档填写 | ✅ |
@@ -163,16 +166,11 @@
 
 *注：部分本地服务可能不需要API Key，可填任意值
 
-### 添加新模型（只需3步，无需改代码！）
+### 添加新模型（只需2步，无需改代码！）
 
 **前提条件**: 该服务必须提供OpenAI兼容的API接口
 
-**步骤1**: 在 `all_api` 中添加配置名
-```json
-"all_api": ["Model1", "Model2"]
-```
-
-**步骤2**: 添加配置块
+**步骤1**: 添加模型配置块
 ```json
 "Model2": {
     "display_name": "新模型名称",
@@ -180,16 +178,20 @@
     "api_key": "从服务获取的密钥",
     "base_url": "https://api.service-name.com/v1",
     "model": "model-name",
-    "debounce_delay": 500
+    "debounce_delay": 500,
+    "temperature": 0.7,
+    "max_tokens": 2000
 }
 ```
 
-**步骤3**: 设置为默认模型（可选）
+**步骤2**: 设置为默认模型（可选）
 ```json
 "cd": "Model2"
 ```
 
-**完成！** 无需修改任何代码，程序会自动识别并加载。
+**完成！** 无需修改任何代码，程序会自动识别并加载所有 `is_open: 1` 的模型。
+
+**Tab切换**：按 `TAB` 键会循环切换所有启用的模型（`is_open: 1`），禁用的模型会被跳过。
 
 ### 常见模型配置示例
 
@@ -304,8 +306,12 @@
 ### 2. 选择快速模型
 选择响应速度快的模型（如gpt-4o-mini、deepseek-chat）可以提高翻译速度。
 
-### 3. 关闭实时翻译
-如果不需要实时翻译，设置 `is_real_time_translate` 为 0，然后按空格键手动触发翻译。
+### 3. 切换翻译模式
+按 `CTRL F8` 可在**手动模式**和**实时模式**之间切换：
+- **手动模式**：按 `Enter` 触发翻译，再按 `Enter` 发送
+- **实时模式**：输入时自动翻译，按 `Enter` 直接发送
+
+手动模式可减少API调用次数，适合节省成本。
 
 ## 成本说明
 
@@ -319,7 +325,7 @@
 
 **优化建议**：
 - 调整 `debounce_delay` 减少请求次数
-- 设置 `is_real_time_translate: 0` 改为手动触发
+- 使用手动模式（`Ctrl F8` 切换）减少API调用
 - 选择性价比高的服务
 
 **注意**：具体费用请查看所选LLM服务的官方价格表。
@@ -361,16 +367,17 @@ A: 需要网络连接。可配置本地服务（如Ollama）实现较低延迟�
 **原因**: LLM API响应通常需要1-2秒
 **解决**:
 1. 调整 `debounce_delay` 减少请求频率
-2. 选择更快的模型
-3. 关闭实时翻译，改手动触发
+2. 选择更快的模型（如gpt-4o-mini、deepseek-chat）
+3. 切换到手动模式（`Ctrl F8`）按需触发翻译
 
 ### 问题3: 启动失败
 **原因**: 配置文件错误或未配置API Key
 **解决**:
 1. 检查 `config.json` 格式是否正确（首次运行会自动创建）
-2. 确认至少配置了一个服务且 `is_open` 为 1
-3. 确认填写了正确的 `api_key` 和 `base_url`
-4. 按 `CTRL F7` 查看当前配置信息
+2. 确认至少配置了一个模型且 `is_open` 为 1
+3. 确认填写了正确的 `api_key` 和 `base_url`（注意不要有多余空格）
+4. 确认所有启用的模型都有 `max_tokens` 字段
+5. 按 `CTRL F7` 查看当前配置信息
 
 ### 问题4: 找不到 config.json
 **原因**: 首次运行或配置文件被删除

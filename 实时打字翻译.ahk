@@ -28,6 +28,8 @@ OnMessage(0x0232, ON_WM_EXITSIZEMOVE)  ; WM_EXITSIZEMOVE
 get_current_service_display_name()
 {
     global g_config, g_current_api
+    if (!g_config.Has(g_current_api))
+        return g_current_api
     api_config := g_config[g_current_api]
     return api_config.Has("display_name") ? api_config["display_name"] : g_current_api
 }
@@ -124,7 +126,6 @@ switch_translation_mode(*)
     g_translation_completed := false
 
     ; 更新配置
-    g_config[g_current_api]["is_real_time_translate"] := g_is_realtime_mode
     g_config["translation_mode"] := g_is_realtime_mode ? "realtime" : "manual"
 
     ; 保存配置
@@ -210,9 +211,39 @@ main()
     global g_config := Map()
     loadconfig(&g_config, config_path)
 
-    ; 初始化API列表
-    global g_all_api := g_config["all_api"]
-    global g_current_api := g_config["cd"]
+    ; 收集所有启用的模型（is_open=1 且有 api_key）
+    global g_all_api := []
+    for key, value in g_config
+    {
+        ; 跳过系统配置字段和数组类型字段（如 all_api）
+        if (key = "translation_mode" || key = "cd" || key = "target_lang" || key = "ui_font")
+            continue
+
+        ; 检查是否是模型配置（必须是 Map 且有 is_open 字段）
+        if (value is Map && value.Has("is_open") && value["is_open"] && value.Has("api_key") && value["api_key"])
+        {
+            g_all_api.Push(key)
+        }
+    }
+
+    ; 确定当前API（优先使用配置的cd，否则使用第一个启用的）
+    global g_current_api
+    if (g_all_api.Length == 0)
+    {
+        MsgBox("错误：没有找到任何启用的翻译模型！请检查 config.json 中至少有一个模型的 is_open=1 且配置了 api_key")
+        ExitApp
+    }
+
+    if (g_config.Has("cd") && g_all_api.Has(g_config["cd"]))
+    {
+        g_current_api := g_config["cd"]
+    }
+    else
+    {
+        g_current_api := g_all_api[1]
+        logger.info("cd配置无效，使用默认API: " g_current_api)
+    }
+
     global g_target_lang := g_config.Has("target_lang") ? g_config["target_lang"] : "en"
     global g_translators := Map()  ; 存储所有LLM实例
 
@@ -220,15 +251,11 @@ main()
     for api_name in g_all_api
     {
         api_config := g_config[api_name]
-        if (api_config["is_open"] && api_config["api_key"])
-        {
-            ; 所有平台使用同一个类，只是配置不同！
-            g_translators[api_name] := OpenAI_Compat_LLM(
-                api_name,
-                api_config,
-                ObjBindMethod(Edit_box, "on_change_stub")
-            )
-        }
+        g_translators[api_name] := OpenAI_Compat_LLM(
+            api_name,
+            api_config,
+            ObjBindMethod(Edit_box, "on_change_stub")
+        )
     }
 
     global g_eb := Edit_box(0, 0, 1000, 100)
@@ -889,7 +916,7 @@ class Edit_box
     debug()
     {
         ; 显示当前LLM配置信息
-        global g_config, g_current_api, g_target_lang
+        global g_config, g_current_api, g_target_lang, g_is_realtime_mode
         try
         {
             api_info := g_config[g_current_api]
@@ -899,8 +926,9 @@ class Edit_box
                 "模型: " api_info["model"] "`n"
                 "API地址: " api_info["base_url"] "`n"
                 "目标语言: " g_target_lang "`n"
-                "实时翻译: " (api_info["is_real_time_translate"] ? "启用" : "禁用") "`n`n"
-                "按 ALT L 可修改目标语言"
+                "翻译模式: " (g_is_realtime_mode ? "实时模式" : "手动模式") "`n`n"
+                "按 ALT L 可修改目标语言`n"
+                "按 Ctrl F8 可切换翻译模式"
             )
         }
         catch as e
@@ -1411,8 +1439,20 @@ CreateHString(str)
 
 loadconfig(&config, json_path)
 {
-    outputvar := FileRead(json_path)
-    config := JSON.parse(outputvar)
+    try
+    {
+        outputvar := FileRead(json_path, "UTF-8")
+        ; 移除BOM标记（如果存在）
+        if (SubStr(outputvar, 1, 3) == "﻿")
+            outputvar := SubStr(outputvar, 4)
+
+        config := JSON.parse(outputvar)
+    }
+    catch as e
+    {
+        MsgBox("配置文件加载失败: " e.Message "`n`n请检查 config.json 格式是否正确")
+        ExitApp
+    }
 }
 ;保存配置函数
 saveconfig(config, json_path)

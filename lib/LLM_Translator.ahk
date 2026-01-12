@@ -36,34 +36,71 @@ class OpenAI_Compat_LLM
             )
 
             ; 构建请求体（OpenAI标准格式）
-            body := Map(
-                "model", this.model,
-                "messages", [
-                    Map("role", "user", "content", prompt)
-                ],
-                "temperature", this.temperature,
-                "max_tokens", this.max_tokens,
-                "stream", false
-            )
+            ; 注意：使用字符串拼接确保布尔值正确序列化为true/false
+            messages_json := JSON.Stringify([
+                Map("role", "user", "content", prompt)
+            ])
+
+            ; 手动构建JSON字符串，确保stream是false而不是0
+            body_json := '{"model":"' . this.model . '","messages":' . messages_json . ',"temperature":' . this.temperature . ',"max_tokens":' . this.max_tokens . ',"stream":false}'
 
             ; 发送HTTP请求
             whr := ComObject("WinHttp.WinHttpRequest.5.1")
             whr.Open("POST", url, true)
             for key, value in headers
                 whr.SetRequestHeader(key, value)
-            whr.Send(JSON.Stringify(body))
+            whr.Send(body_json)
             whr.WaitForResponse(5)  ; 5秒超时（缩短阻塞时间）
 
             ; 记录响应状态
             status := whr.Status
-            logger.err("[" this.name "] API响应状态: " status)
 
             ; 解析响应
             response := whr.ResponseText
-            logger.err("[" this.name "] API响应内容: " response)
+
+            ; 检查HTTP状态码
+            if (status != 200)
+            {
+                error_msg := "API错误 (HTTP " status "): " response
+                logger.err("[" this.name "] " error_msg)
+                if this.callback
+                    this.callback.Call(this.name, "[错误: " error_msg "]")
+                return ""
+            }
 
             result := JSON.Parse(response)
-            translated := result["choices"][1]["message"]["content"]
+
+            ; 安全地访问JSON字段
+            if (!result.Has("choices"))
+            {
+                error_msg := "API返回格式错误：缺少choices字段"
+                logger.err("[" this.name "] " error_msg)
+                if this.callback
+                    this.callback.Call(this.name, "[错误: " error_msg "]")
+                return ""
+            }
+
+            choices := result["choices"]
+            if (choices.Length == 0)
+            {
+                error_msg := "API返回格式错误：choices为空"
+                logger.err("[" this.name "] " error_msg)
+                if this.callback
+                    this.callback.Call(this.name, "[错误: " error_msg "]")
+                return ""
+            }
+
+            choice := choices[1]
+            if (!choice.Has("message") || !choice["message"].Has("content"))
+            {
+                error_msg := "API返回格式错误：缺少message.content字段"
+                logger.err("[" this.name "] " error_msg)
+                if this.callback
+                    this.callback.Call(this.name, "[错误: " error_msg "]")
+                return ""
+            }
+
+            translated := choice["message"]["content"]
 
             ; 触发回调
             if this.callback
@@ -73,10 +110,11 @@ class OpenAI_Compat_LLM
         }
         catch as e
         {
-            logger.err("[" this.name "] 翻译失败: " e.Message)
+            error_msg := "翻译失败: " e.Message
+            logger.err("[" this.name "] " error_msg)
             logger.err("[" this.name "] 错误详情: " e.What)
             if this.callback
-                this.callback.Call(this.name, "[错误: " e.Message "]")
+                this.callback.Call(this.name, "[错误: " error_msg "]")
             return ""
         }
     }

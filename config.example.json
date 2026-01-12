@@ -2,11 +2,6 @@
     "translation_mode": "manual",
     "cd": "Model1",
     "target_lang": "English",
-    "all_api": [
-        "Model1",
-        "Model2",
-        "Model3"
-    ],
     "ui_font": {
         "family": "Segoe UI",
         "tooltip_size": 16,
@@ -15,7 +10,6 @@
     "Model1": {
         "display_name": "OpenAI GPT",
         "is_open": 1,
-        "is_real_time_translate": 1,
         "api_key": "sk-xxxxxxxxxxxxxxxx",
         "base_url": "https://api.openai.com/v1",
         "model": "gpt-4o-mini",
@@ -26,19 +20,21 @@
     "Model2": {
         "display_name": "示例模型",
         "is_open": 0,
-        "is_real_time_translate": 0,
         "api_key": "your-api-key-here",
         "base_url": "https://your-llm-service.com/v1",
         "model": "your-model-name",
-        "debounce_delay": 1000
+        "debounce_delay": 1000,
+        "temperature": 0.7,
+        "max_tokens": 2000
     },
     "Model3": {
         "display_name": "本地 Ollama",
         "is_open": 0,
-        "is_real_time_translate": 0,
         "api_key": "not-required",
         "base_url": "http://localhost:11434/v1",
         "model": "local-model",
-        "debounce_delay": 1000
+        "debounce_delay": 1000,
+        "temperature": 0.7,
+        "max_tokens": 2000
     }
 }
