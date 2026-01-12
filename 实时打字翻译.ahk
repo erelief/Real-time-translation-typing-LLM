@@ -613,18 +613,21 @@ fanyi(*)
     handle_width := 30  ; 手柄宽度
     tooltip_y := y - 45
 
-    ; 显示 Tooltip（在手柄右侧，同一行）并获取实际高度
+    ; 显示 Tooltip（在手柄右侧，同一行）并获取实际位置和高度
     display_name := get_service_display_with_status()
     tooltip_info := btt('[' display_name ']', Integer(x + handle_width), Integer(tooltip_y),,OwnzztooltipStyle1,{Transparent:180,DistanceBetweenMouseXAndToolTip:-100,DistanceBetweenMouseYAndToolTip:-20})
 
-    ; 获取tooltip的实际高度
+    ; tooltip_info 包含 X, Y（经过边界调整后的实际位置）和 H（高度）
+    ; 只在水平方向使用调整后的位置，垂直方向保持原值（避免顶部时位置下移）
+    handle_x := tooltip_info.X - handle_width
+    handle_y := tooltip_y  ; 保持原值，不使用调整后的 Y
     tooltip_height := tooltip_info.H
 
-    ; 显示拖拽手柄（高度自适应tooltip）
-    g_dh.show_with_height(x, tooltip_y, handle_width, tooltip_height)
+    ; 显示拖拽手柄（根据tooltip调整后的X位置，避免被遮挡）
+    g_dh.show_with_height(handle_x, handle_y, handle_width, tooltip_height)
 
     ; 显示输入框（在tooltip下方，左对齐tooltip）
-    g_eb.show(x + handle_width, y)
+    g_eb.show(tooltip_info.X, y)
 }
 ON_WM_KEYDOWN(wParam, lParam, msg, hwnd)
 {
