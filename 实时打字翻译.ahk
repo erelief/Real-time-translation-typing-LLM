@@ -881,6 +881,19 @@ class Edit_box
         return StrReplace(text, " ", "␣")
     }
 
+    ; 显示翻译中提示（手动模式触发翻译时）
+    show_translating_tooltip()
+    {
+        global g_dh
+        ; 获取手柄位置（tooltip在手柄右侧，同一行）
+        g_dh.ui.gui.GetPos(&x, &y)
+        handle_width := 30
+        display_name := get_service_display_with_status()
+
+        ; 显示 [✈] 提示
+        btt('[' display_name ']: [✈]', Integer(x + handle_width), Integer(y),,OwnzztooltipStyle1,{Transparent:180,DistanceBetweenMouseXAndToolTip:-100,DistanceBetweenMouseYAndToolTip:-20})
+    }
+
     on_change(cd ,text)
     {
         global g_is_translating, g_dh, g_is_realtime_mode, g_translation_completed
@@ -1104,12 +1117,15 @@ class Edit_box
     ; 触发翻译
     trigger_translate()
     {
-        global g_translators, g_current_api, g_target_lang, g_is_translating
+        global g_translators, g_current_api, g_target_lang, g_is_translating, g_dh
         input_text := this.text
         if (input_text != "" && g_translators.Has(g_current_api))
         {
             ; 标记正在翻译
             g_is_translating := true
+
+            ; 显示翻译中提示
+            this.show_translating_tooltip()
 
             ; 设置回调为当前实例
             g_translators[g_current_api].set_callback(this.on_change.bind(this))
