@@ -136,7 +136,7 @@
         "base_url": "https://api.openai.com/v1",
         "model": "gpt-4o-mini",
         "debounce_delay": 500,
-        "temperature": 1,
+        "temperature": 0.5,
         "max_tokens": 2000
     }
 }
