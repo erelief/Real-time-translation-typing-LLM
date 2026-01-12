@@ -56,6 +56,32 @@ close_translator(*)
     KeyWait("Esc")  ; 等待 ESC 释放，阻止按键传递
 }
 
+; 全局鼠标点击检测（用于失焦退出）
+on_global_mouse_click(*)
+{
+    global g_eb, g_dh
+
+    ; 只在翻译器显示时处理
+    if (!g_eb.show_status)
+        return
+
+    ; 检查是否正在拖拽
+    if (g_dh.is_dragging)
+        return
+
+    ; 获取点击的窗口句柄
+    MouseGetPos(, , &clicked_window, &control)
+
+    ; 如果点击的不是手柄 → 退出
+    ; 点击手柄不退出（用户在拖拽），点击其他任何地方都退出
+    if (clicked_window != g_dh.ui.Hwnd)
+    {
+        logger.info(">>> 点击非翻译器区域，自动退出")
+        g_eb.hide()
+        g_dh.hide()
+    }
+}
+
 ; 处理Enter键（手动模式：触发翻译/发送；实时模式：直接发送）
 handle_enter_key(*)
 {
@@ -134,37 +160,6 @@ cleanup_translator()
     if (g_eb.debounce_timer)
         SetTimer(g_eb.debounce_timer, 0)
     g_eb.debounce_timer := 0
-}
-
-; 检查焦点并自动退出（由定时器调用）
-check_focus_and_close()
-{
-    global g_eb, g_dh, g_focus_check_timer
-
-    ; 如果翻译器已隐藏，停止检查
-    if (!g_eb.show_status)
-    {
-        if (g_focus_check_timer)
-            SetTimer(g_focus_check_timer, 0)
-        g_focus_check_timer := 0
-        return
-    }
-
-    ; 检查是否正在拖拽
-    if (g_dh.is_dragging)
-        return  ; 拖拽时不检查焦点
-
-    ; 检查输入框是否是激活窗口
-    input_hwnd := g_eb.ui.gui.Hwnd
-    active_hwnd := WinGetID("A")
-
-    ; 如果输入框不激活，说明用户点击了其他地方 → 自动退出
-    if (active_hwnd != input_hwnd)
-    {
-        logger.info(">>> 输入框失去焦点，自动退出")
-        g_eb.hide()
-        g_dh.hide()
-    }
 }
 
 ; ========== 光标闪烁定时器 ==========
@@ -263,9 +258,6 @@ main()
     ; 更新 tooltip 样式字体大小
     OwnzztooltipStyle1.FontSize := g_ui_font_tooltip_size
 
-    ; 焦点检查定时器（用于检测点击其他地方自动退出）
-    global g_focus_check_timer := 0
-
     ; 光标闪烁相关变量
     global g_cursor_visible := true  ; 光标可见状态
     global g_cursor_blink_timer := 0  ; 光标闪烁定时器
@@ -296,6 +288,7 @@ main()
     Hotkey('^f8', (key) => switch_translation_mode()) ;切换翻译模式
     Hotkey('!l', (key) => change_target_language()) ;切换目标语言
     Hotkey('~Esc', close_translator) ;退出
+    Hotkey('~LButton', on_global_mouse_click) ;全局鼠标点击检测（用于失焦退出）
 	HotIfWinExist("ahk_id " g_eb.ui.hwnd)
         Hotkey("enter", handle_enter_key) ;手动模式：翻译/发送；实时模式：发送
         Hotkey("^enter", (key) => send_command('Primitive')) ;发送原始文本
@@ -930,7 +923,7 @@ class Edit_box
     }
     show(x := 0, y := 0)
     {
-        global g_focus_check_timer, g_cursor_blink_timer, g_cursor_visible
+        global g_cursor_blink_timer, g_cursor_visible
         this.ui.gui.show('x' x ' y' y)
         this.show_status := true
 
@@ -939,23 +932,16 @@ class Edit_box
         g_cursor_blink_timer := SetTimer(toggle_cursor_blink, 530)
 
         this.draw()  ; 立即绘制，避免白框
-
-        ; 启动焦点检查定时器（每200ms检查一次）
-        g_focus_check_timer := SetTimer(check_focus_and_close, 200)
     }
     hide()
     {
-        global g_focus_check_timer, g_cursor_blink_timer
+        global g_cursor_blink_timer
 
         ; 隐藏窗口
         this.ui.gui.hide()
         this.show_status := false
 
-        ; 停止定时器
-        if (g_focus_check_timer)
-            SetTimer(g_focus_check_timer, 0)
-        g_focus_check_timer := 0
-
+        ; 停止光标闪烁定时器
         if (g_cursor_blink_timer)
             SetTimer(g_cursor_blink_timer, 0)
         g_cursor_blink_timer := 0
