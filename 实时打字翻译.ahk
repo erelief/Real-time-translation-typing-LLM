@@ -778,6 +778,21 @@ ON_WM_EXITSIZEMOVE(wParam, lParam, msg, hwnd)
     g_cursor_x := x
     g_cursor_y := y
 
+    ; 拖拽结束后，tooltip可能因为贴边被BTT调整了位置
+    ; 此时需要根据tooltip的实际位置重新调整手柄位置（和翻译结果过长时的行为一致）
+    handle_width := 30
+    display_name := get_service_display_with_status()
+
+    ; 根据翻译结果显示不同的tooltip
+    if (g_eb.translation_result != "")
+    {
+        show_tooltip_and_update_handle('[' display_name ']: ' g_eb.translation_result, x + handle_width, y)
+    }
+    else
+    {
+        show_tooltip_and_update_handle('[' display_name ']', x + handle_width, y)
+    }
+
     ; 激活翻译输入框，确保拖动后焦点回到输入框
     WinActivate("ahk_id " g_eb.ui.gui.Hwnd)
 
