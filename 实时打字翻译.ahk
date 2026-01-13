@@ -407,7 +407,7 @@ main()
     global g_is_input_mode := true
     global g_lol_api := Lcu()
 
-    ; 位置记忆相关变量（会话级，按进程名）
+    ; 位置记忆相关变量（会话级，按控件句柄）
     global g_manual_positions := Map()
 
     ; 翻译状态标志（用于防止翻译未完成时发送）
@@ -695,6 +695,9 @@ open_translator(*)
     global g_window_hwnd, g_eb, g_dh
     global g_manual_positions, g_drag_handle_height
 
+    ; 声明局部变量，避免 #Warn 警告
+    local x := 0, y := 0, w := 0, h := 0
+
     ; 如果翻译器已经显示，先隐藏（防止重复创建窗口）
     if (g_eb.show_status)
     {
@@ -716,20 +719,35 @@ open_translator(*)
         return
     }
 
-    ; 获取进程名，用于位置记忆
-    process_name := WinGetProcessName("ahk_id " g_window_hwnd)
+    ; 使用控件句柄作为位置记忆的键（支持同一软件内的多个输入框）
+    control_hwnd := g_window_hwnd
+    local class_name := ""  ; 声明局部变量，避免 #Warn 警告
 
-    ; 检查当前会话是否有该进程的记忆位置
-    if (g_manual_positions.Has(process_name))
+    ; 检查当前会话是否有该控件的记忆位置
+    if (g_manual_positions.Has(control_hwnd))
     {
-        pos := g_manual_positions[process_name]
+        pos := g_manual_positions[control_hwnd]
         x := pos.x
         y := pos.y
-        logger.info("使用记忆位置: " process_name, x, y)
+
+        ; 验证控件句柄是否仍然有效
+        try {
+            WinGetClass(class_name, "ahk_id " control_hwnd)
+            logger.info("使用记忆位置 [控件]: " class_name, x, y)
+        } catch {
+            logger.info("记忆位置的控件句柄已失效，使用默认位置")
+            ; 移除失效的记录
+            g_manual_positions.Delete(control_hwnd)
+        }
     }
     else
     {
-        logger.info("使用默认光标位置: " process_name, x, y)
+        try {
+            WinGetClass(class_name, "ahk_id " control_hwnd)
+            logger.info("使用默认光标位置: " class_name, x, y)
+        } catch {
+            logger.info("使用默认光标位置")
+        }
     }
 
     g_cursor_x := x
@@ -872,10 +890,10 @@ ON_WM_EXITSIZEMOVE(wParam, lParam, msg, hwnd)
     g_cursor_visible := true
     g_cursor_blink_timer := SetTimer(toggle_cursor_blink, 530)
 
-    ; 保存位置
+    ; 保存位置（使用控件句柄作为键）
     pos := g_dh.get_gui_pos()
-    process_name := WinGetProcessName("ahk_id " g_window_hwnd)
-    g_manual_positions[process_name] := {x: pos.x, y: pos.y}
+    control_hwnd := g_window_hwnd
+    g_manual_positions[control_hwnd] := {x: pos.x, y: pos.y}
 
     ; 更新全局坐标
     g_cursor_x := pos.x
@@ -889,17 +907,24 @@ ON_WM_EXITSIZEMOVE(wParam, lParam, msg, hwnd)
     ; 根据翻译结果显示不同的tooltip
     if (g_eb.translation_result != "")
     {
-        show_tooltip_and_update_handle('[' display_name ']: ' g_eb.translation_result, x + handle_width, y)
+        show_tooltip_and_update_handle('[' display_name ']: ' g_eb.translation_result, pos.x + handle_width, pos.y)
     }
     else
     {
-        show_tooltip_and_update_handle('[' display_name ']', x + handle_width, y)
+        show_tooltip_and_update_handle('[' display_name ']', pos.x + handle_width, pos.y)
     }
 
     ; 激活翻译输入框，确保拖动后焦点回到输入框
     WinActivate("ahk_id " g_eb.ui.gui.Hwnd)
 
-    logger.info(">>> 拖拽结束，保存位置:", process_name, x, y)
+    ; 记录调试信息（使用控件类名标识）
+    local class_name := ""  ; 声明局部变量，避免 #Warn 警告
+    try {
+        WinGetClass(class_name, "ahk_id " control_hwnd)
+        logger.info(">>> 拖拽结束，保存位置 [控件]: " class_name, pos.x, pos.y)
+    } catch {
+        logger.info(">>> 拖拽结束，保存位置", pos.x, pos.y)
+    }
 }
 
 ON_MESSAGE_WM_CHAR(wParam, lParam, msg, hwnd)
@@ -1178,7 +1203,7 @@ class Edit_box
                     tooltip_text .= '[↵]'
                 }
 
-                show_tooltip_and_update_handle(tooltip_text, x + handle_width, y)
+                show_tooltip_and_update_handle(tooltip_text, Integer(pos.x + handle_width), Integer(pos.y))
             }
         }
     }
