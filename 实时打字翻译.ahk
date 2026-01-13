@@ -52,7 +52,7 @@ get_service_display_with_status()
 ; 显示tooltip并自动更新手柄和输入框位置（避免tooltip盖住手柄）
 show_tooltip_and_update_handle(text, x, y)
 {
-    global g_dh, g_eb
+    global g_dh, g_eb, g_drag_handle_height
     handle_width := 30
 
     ; 显示tooltip并获取实际位置（经过边界调整）
@@ -70,8 +70,8 @@ show_tooltip_and_update_handle(text, x, y)
     }
 
     ; 同时更新输入框位置：在tooltip下方，左对齐tooltip
-    ; 输入框X = tooltip.X，输入框Y = tooltip.Y + tooltip.H
-    g_eb.move(tooltip_info.X, tooltip_info.Y + tooltip_info.H)
+    ; 输入框X = tooltip.X，输入框Y = tooltip.Y + 固化高度（即使tooltip换行增高也不改变）
+    g_eb.move(tooltip_info.X, tooltip_info.Y + g_drag_handle_height)
 
     return tooltip_info
 }
@@ -330,6 +330,9 @@ main()
     ; 光标闪烁相关变量
     global g_cursor_visible := true  ; 光标可见状态
     global g_cursor_blink_timer := 0  ; 光标闪烁定时器
+
+    ; 拖拽把手高度（首次打开翻译器时固化tooltip首行高度）
+    global g_drag_handle_height := 0
 
     zmq_version(&a := 0, &b := 0, &c := 0)
     logger.info("版本: ", a, b, c)
@@ -591,7 +594,7 @@ open_translator(*)
 {
     global g_cursor_x, g_cursor_y
     global g_window_hwnd, g_eb, g_dh
-    global g_manual_positions
+    global g_manual_positions, g_drag_handle_height
 
     ; 如果翻译器已经显示，先隐藏（防止重复创建窗口）
     if (g_eb.show_status)
@@ -642,8 +645,13 @@ open_translator(*)
     handle_y := tooltip_y  ; 保持原值，不使用调整后的 Y
     tooltip_height := tooltip_info.H
 
-    ; 显示拖拽手柄（根据tooltip调整后的X位置，避免被遮挡）
-    g_dh.show_with_height(handle_x, handle_y, handle_width, tooltip_height)
+    ; 首次记录tooltip高度（只在第一次打开时固化首行高度）
+    if (g_drag_handle_height = 0) {
+        g_drag_handle_height := tooltip_info.H
+    }
+
+    ; 显示拖拽手柄（使用固化高度，即使后续tooltip换行增高也不改变）
+    g_dh.show_with_height(handle_x, handle_y, handle_width, g_drag_handle_height)
 
     ; 显示输入框（在tooltip下方，左对齐tooltip）
     g_eb.show(tooltip_info.X, y)
@@ -670,7 +678,7 @@ ON_WM_KEYDOWN(wParam, lParam, msg, hwnd)
 ; 拖拽定时器回调：持续更新输入框和 Tooltip 位置
 DragUpdateTimer()
 {
-    global g_dh, g_eb
+    global g_dh, g_eb, g_drag_handle_height
 
     if (!g_dh.is_dragging)
         return
@@ -683,8 +691,8 @@ DragUpdateTimer()
     handle_width := 30
 
     ; 移动输入框（在tooltip下方，左对齐tooltip）
-    ; 手柄在y，tooltip也在y（同一行），输入框在y+45（tooltip下方）
-    g_eb.move(x + handle_width, y + 45)
+    ; 手柄在y，tooltip也在y（同一行），输入框在y+固化高度（tooltip下方）
+    g_eb.move(x + handle_width, y + g_drag_handle_height)
 
     ; 更新 Tooltip 位置和内容（在手柄右侧，同一行）
     display_name := get_service_display_with_status()
