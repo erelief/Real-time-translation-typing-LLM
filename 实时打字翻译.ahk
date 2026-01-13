@@ -157,7 +157,9 @@ show_tooltip_and_update_handle(text, x, y)
 
     ; 根据tooltip的实际位置更新手柄位置（手柄在tooltip左侧）
     ; 只更新X坐标，Y坐标保持不变（避免垂直方向跳动）
-    g_dh.ui.gui.GetPos(&current_handle_x, &current_handle_y)
+    pos := g_dh.get_gui_pos()
+    current_handle_x := pos.x
+    current_handle_y := pos.y
     new_handle_x := tooltip_info.X - handle_width
 
     ; 只有当位置真正改变时才移动手柄
@@ -671,11 +673,11 @@ tab_send(*)
     logger.info('=========' display_name)
 
     ; 获取手柄当前位置
-    g_dh.ui.gui.GetPos(&handle_x, &handle_y)
+    pos := g_dh.get_gui_pos()
     handle_width := 30
 
     ; 使用手柄位置显示tooltip（在手柄右侧，同一行）
-    btt('[' display_name ']', Integer(handle_x + handle_width), Integer(handle_y),,OwnzztooltipStyle1,{Transparent:180,DistanceBetweenMouseXAndToolTip:-100,DistanceBetweenMouseYAndToolTip:-20})
+    btt('[' display_name ']', Integer(pos.x + handle_width), Integer(pos.y),,OwnzztooltipStyle1,{Transparent:180,DistanceBetweenMouseXAndToolTip:-100,DistanceBetweenMouseYAndToolTip:-20})
 
     ; 确保手柄显示（防止在输入过程中丢失）
     if (!g_dh.show_status)
@@ -790,8 +792,7 @@ DragUpdateTimer()
         return
 
     ; 获取手柄当前位置
-    local x, y
-    g_dh.ui.gui.GetPos(&x, &y)
+    pos := g_dh.get_gui_pos()
 
     ; 手柄宽度
     handle_width := 30
@@ -801,11 +802,11 @@ DragUpdateTimer()
     display_name := get_service_display_with_status()
     if (g_eb.translation_result != "")
     {
-        show_tooltip_and_update_handle('[' display_name ']: ' g_eb.translation_result, x + handle_width, y)
+        show_tooltip_and_update_handle('[' display_name ']: ' g_eb.translation_result, Integer(pos.x + handle_width), Integer(pos.y))
     }
     else
     {
-        show_tooltip_and_update_handle('[' display_name ']', x + handle_width, y)
+        show_tooltip_and_update_handle('[' display_name ']', Integer(pos.x + handle_width), Integer(pos.y))
     }
 }
 
@@ -872,14 +873,13 @@ ON_WM_EXITSIZEMOVE(wParam, lParam, msg, hwnd)
     g_cursor_blink_timer := SetTimer(toggle_cursor_blink, 530)
 
     ; 保存位置
-    local x, y
-    g_dh.ui.gui.GetPos(&x, &y)
+    pos := g_dh.get_gui_pos()
     process_name := WinGetProcessName("ahk_id " g_window_hwnd)
-    g_manual_positions[process_name] := {x: x, y: y}
+    g_manual_positions[process_name] := {x: pos.x, y: pos.y}
 
     ; 更新全局坐标
-    g_cursor_x := x
-    g_cursor_y := y
+    g_cursor_x := pos.x
+    g_cursor_y := pos.y
 
     ; 拖拽结束后，tooltip可能因为贴边被BTT调整了位置
     ; 此时需要根据tooltip的实际位置重新调整手柄位置（和翻译结果过长时的行为一致）
@@ -910,7 +910,7 @@ ON_MESSAGE_WM_CHAR(wParam, lParam, msg, hwnd)
     if (hwnd != g_eb.ui.Hwnd)
         return
 
-    logger.info(wParam, lParam, num2utf16(wParam))
+    ; logger.info(wParam, lParam, num2utf16(wParam))  ; 性能优化：移除热路径日志
 
     ; 默认模式下：字符输入重置翻译状态并更新tooltip
     if (!g_is_realtime_mode && g_translation_completed)
@@ -920,12 +920,12 @@ ON_MESSAGE_WM_CHAR(wParam, lParam, msg, hwnd)
         ; 重新显示tooltip，去掉[↵]
         if (g_eb.translation_result != "" && g_dh.show_status)
         {
-            g_dh.ui.gui.GetPos(&x, &y)
+            pos := g_dh.get_gui_pos()
             handle_width := 30
             display_name := get_service_display_with_status()
 
             ; 重新显示tooltip（不带[↵]）
-            show_tooltip_and_update_handle('[' display_name ']: ' g_eb.translation_result, x + handle_width, y)
+            show_tooltip_and_update_handle('[' display_name ']: ' g_eb.translation_result, Integer(pos.x + handle_width), Integer(pos.y))
         }
     }
 
@@ -950,16 +950,16 @@ ON_MESSAGE_WM_IME_CHAR(wParam, lParam, msg, hwnd)
         ; 重新显示tooltip，去掉[↵]
         if (g_eb.translation_result != "" && g_dh.show_status)
         {
-            g_dh.ui.gui.GetPos(&x, &y)
+            pos := g_dh.get_gui_pos()
             handle_width := 30
             display_name := get_service_display_with_status()
 
             ; 重新显示tooltip（不带[↵]）
-            show_tooltip_and_update_handle('[' display_name ']: ' g_eb.translation_result, x + handle_width, y)
+            show_tooltip_and_update_handle('[' display_name ']: ' g_eb.translation_result, Integer(pos.x + handle_width), Integer(pos.y))
         }
     }
 
-    logger.info(wParam, lParam, num2utf16(wParam))
+    ; logger.info(wParam, lParam, num2utf16(wParam))  ; 性能优化：移除热路径日志
     g_eb.set_imm(wParam)
 }
 
@@ -1012,6 +1012,14 @@ class DragHandle
         this.x := x
         this.y := y
         this.ui.SetPosition(x, y)
+    }
+
+    ; 获取手柄的实际屏幕位置（从GUI获取实时位置）
+    get_gui_pos()
+    {
+        local x, y
+        this.ui.gui.GetPos(&x, &y)
+        return {x: x, y: y}
     }
 
     get_pos()
@@ -1115,12 +1123,12 @@ class Edit_box
     {
         global g_dh
         ; 获取手柄位置（tooltip在手柄右侧，同一行）
-        g_dh.ui.gui.GetPos(&x, &y)
+        pos := g_dh.get_gui_pos()
         handle_width := 30
         display_name := get_service_display_with_status()
 
         ; 显示 [✈] 提示
-        show_tooltip_and_update_handle('[' display_name ']: [✈]', x + handle_width, y)
+        show_tooltip_and_update_handle('[' display_name ']: [✈]', Integer(pos.x + handle_width), Integer(pos.y))
     }
 
     on_change(cd ,text)
@@ -1144,21 +1152,21 @@ class Edit_box
             g_translation_completed := true
         }
 
-        logger.info(cd ,text)
-        logger.info()
+        ; logger.info(cd ,text)  ; 性能优化：移除频繁日志
+        ; logger.info()  ; 性能优化：移除空日志调用
         if(this.show_status && cd = g_current_api)
         {
             this.translation_result := text
 
             ; 获取手柄位置（tooltip在手柄右侧，同一行）
-            g_dh.ui.gui.GetPos(&x, &y)
+            pos := g_dh.get_gui_pos()
             handle_width := 30
             display_name := get_service_display_with_status()
 
             ; 如果翻译结果为空，只显示服务名
             if (text = "")
             {
-                show_tooltip_and_update_handle('[' display_name ']', x + handle_width, y)
+                show_tooltip_and_update_handle('[' display_name ']', Integer(pos.x + handle_width), Integer(pos.y))
             }
             else
             {
@@ -1253,7 +1261,7 @@ class Edit_box
         global g_ui_font_family, g_ui_font_input_size
         ui := this.ui
         ui.gui.GetPos(&x, &y, &w, &h)
-        logger.info(x, y, w, h)
+        ; logger.info(x, y, w, h)  ; 性能优化：移除绘制函数中的日志
 
         ; 标记开始绘制
         this.is_drawing := true
@@ -1283,7 +1291,7 @@ class Edit_box
 
             ; 计算文字的大小
             wh := this.ui.GetTextWidthHeight(display_text, g_ui_font_input_size, g_ui_font_family)
-            logger.info(wh)
+            ; logger.info(wh)  ; 性能优化：移除绘制函数中的日志
             this.move(x, y, wh.width + 100, wh.height + 100)
 
             ; 只在输入为空时显示服务名 Tooltip（避免频繁更新）
@@ -1291,10 +1299,10 @@ class Edit_box
             {
                 this.translation_result := ""
                 ; 获取手柄位置（tooltip在手柄右侧，同一行）
-                g_dh.ui.gui.GetPos(&handle_x, &handle_y)
+                pos := g_dh.get_gui_pos()
                 handle_width := 30
                 display_name := get_service_display_with_status()
-                btt('[' display_name ']', Integer(handle_x + handle_width), Integer(handle_y),,OwnzztooltipStyle1,{Transparent:180,DistanceBetweenMouseXAndToolTip:-100,DistanceBetweenMouseYAndToolTip:-20})
+                btt('[' display_name ']', Integer(pos.x + handle_width), Integer(pos.y),,OwnzztooltipStyle1,{Transparent:180,DistanceBetweenMouseXAndToolTip:-100,DistanceBetweenMouseYAndToolTip:-20})
             }
             if(ui.BeginDraw())
             {
@@ -1323,7 +1331,7 @@ class Edit_box
                     ui.DrawLine(cursor_x, 2, cursor_x, wh.height - 2, 0xFFFFFFFF, 2)
                 }
 
-                logger.err(this.text)
+                ; logger.err(this.text)  ; 性能优化：移除绘制函数中的日志
                 ui.EndDraw()
             }
 
@@ -1376,11 +1384,11 @@ class Edit_box
     }
     push(char)
     {
-        logger.info(char)
-        logger.err(this.text)
+        ; logger.info(char)  ; 性能优化：移除热路径日志
+        ; logger.err(this.text)  ; 性能优化：移除热路径日志
         left_txt := SubStr(this.text, 1, StrLen(this.text) - this.insert_pos)
         right_txt := SubStr(this.text, -this.insert_pos)
-        logger.err(left_txt, right_txt)
+        ; logger.err(left_txt, right_txt)  ; 性能优化：移除热路径日志
         if(char == '`b')
         {
             this.text := SubStr(left_txt, 1, -1) right_txt
@@ -1389,7 +1397,7 @@ class Edit_box
         {
             this.text := left_txt char right_txt
         }
-        logger.err(this.text, this.insert_pos)
+        ; logger.err(this.text, this.insert_pos)  ; 性能优化：移除热路径日志
     }
     set_text(text)
     {
@@ -1427,7 +1435,7 @@ class Edit_box
 
         rtn := ImmSetCandidateWindow(himc, candidate_form)
         ImmReleaseContext(this.ui.Hwnd, himc)
-        logger.info(num2utf16(char))
+        ; logger.info(num2utf16(char))  ; 性能优化：移除热路径日志
         this.push(num2utf16(char))
         this.draw()
     }
