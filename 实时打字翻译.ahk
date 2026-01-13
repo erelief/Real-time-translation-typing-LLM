@@ -50,7 +50,7 @@ get_service_display_with_status()
 }
 
 ; 显示tooltip并自动更新手柄和输入框位置（避免tooltip盖住手柄）
-show_tooltip_and_update_handle(text, x, y, avoid_edge := true)
+show_tooltip_and_update_handle(text, x, y)
 {
     global g_dh, g_eb, g_drag_handle_height
     handle_width := 30
@@ -58,9 +58,9 @@ show_tooltip_and_update_handle(text, x, y, avoid_edge := true)
     ; 显示tooltip并获取实际位置（经过边界调整）
     tooltip_info := btt(text, Integer(x), Integer(y),,OwnzztooltipStyle1,{Transparent:180,DistanceBetweenMouseXAndToolTip:-100,DistanceBetweenMouseYAndToolTip:-20})
 
-    ; 检查BTT是否调整了位置（说明贴边了），如果是则向内缩5px避免贴边
-    ; 只在需要避开边缘时才执行（拖拽结束时，避免闪烁）
-    if (avoid_edge)
+    ; 边缘检测：tooltip的固有行为
+    ; 唯一排除：拖拽进行中时不检测（避免闪烁）
+    if (!g_dh.is_dragging)
     {
         original_x := x + handle_width
         original_y := y
@@ -675,41 +675,9 @@ open_translator(*)
 
     ; 显示 Tooltip（在手柄右侧，同一行）并获取实际位置和高度
     display_name := get_service_display_with_status()
-    tooltip_info := btt('[' display_name ']', Integer(x + handle_width), Integer(tooltip_y),,OwnzztooltipStyle1,{Transparent:180,DistanceBetweenMouseXAndToolTip:-100,DistanceBetweenMouseYAndToolTip:-20})
 
-    ; 检查BTT是否调整了位置（说明贴边了），如果是则向内缩5px避免贴边
-    original_x := x + handle_width
-    original_y := tooltip_y
-    x_adjusted := Abs(tooltip_info.X - original_x) > 5
-    y_adjusted := Abs(tooltip_info.Y - original_y) > 5
-
-    if (x_adjusted or y_adjusted)  ; X或Y方向被调整，说明贴边
-    {
-        OwnzztooltipEnd()  ; 清除当前tooltip
-
-        ; 根据调整方向，基于BTT调整后的位置再向内缩5px
-        new_tooltip_x := tooltip_info.X
-        new_tooltip_y := tooltip_info.Y
-
-        if (x_adjusted)
-        {
-            if (tooltip_info.X < original_x)  ; 向左调整了（右边贴边）
-                new_tooltip_x := tooltip_info.X - 5  ; 基于调整后的位置再向左缩5px
-            else  ; 向右调整了（左边贴边）
-                new_tooltip_x := tooltip_info.X + 5  ; 基于调整后的位置再向右缩5px
-        }
-
-        if (y_adjusted)
-        {
-            if (tooltip_info.Y < original_y)  ; 向上调整了（下边贴边）
-                new_tooltip_y := tooltip_info.Y - 5  ; 基于调整后的位置再向上缩5px
-            else  ; 向下调整了（上边贴边）
-                new_tooltip_y := tooltip_info.Y + 5  ; 基于调整后的位置再向下缩5px
-        }
-
-        ; 重新显示tooltip（使用新的安全位置）
-        tooltip_info := btt('[' display_name ']', Integer(new_tooltip_x), Integer(new_tooltip_y),,OwnzztooltipStyle1,{Transparent:180,DistanceBetweenMouseXAndToolTip:-100,DistanceBetweenMouseYAndToolTip:-20})
-    }
+    ; 使用统一的函数处理边缘检测和位置更新
+    tooltip_info := show_tooltip_and_update_handle('[' display_name ']', x + handle_width, tooltip_y)
 
     ; tooltip_info 包含 X, Y（经过边界调整后的实际位置）和 H（高度）
     ; 只在水平方向使用调整后的位置，垂直方向保持原值（避免顶部时位置下移）
@@ -770,11 +738,11 @@ DragUpdateTimer()
     display_name := get_service_display_with_status()
     if (g_eb.translation_result != "")
     {
-        show_tooltip_and_update_handle('[' display_name ']: ' g_eb.translation_result, x + handle_width, y, false)  ; 拖拽时不做边缘偏移
+        show_tooltip_and_update_handle('[' display_name ']: ' g_eb.translation_result, x + handle_width, y)
     }
     else
     {
-        show_tooltip_and_update_handle('[' display_name ']', x + handle_width, y, false)  ; 拖拽时不做边缘偏移
+        show_tooltip_and_update_handle('[' display_name ']', x + handle_width, y)
     }
 }
 
