@@ -49,14 +49,84 @@ get_service_display_with_status()
     return display_name
 }
 
+; 智能文本换行函数（记事本式：单词作为整体）
+wrap_text_word_aware(text, max_width, font_size, font_family, renderer)
+{
+    delimiters := " ,.!?;:，。！？；："
+    result_lines := []
+    current_line := ""
+
+    words := split_keep_delimiters(text, delimiters)
+
+    for word in words
+    {
+        test_line := (current_line = "") ? word : current_line . " " . word
+        wh := renderer.GetTextWidthHeight(test_line, font_size, font_family)
+
+        if (wh.width <= max_width)
+            current_line := test_line
+        else
+        {
+            if (current_line = "")
+                current_line := word
+            else
+            {
+                result_lines.Push(current_line)
+                current_line := word
+            }
+        }
+    }
+
+    if (current_line != "")
+        result_lines.Push(current_line)
+
+    return RTrim(result_lines.Join("`n"))
+}
+
+; 辅助函数：分割文本但保留分隔符
+split_keep_delimiters(text, delimiters)
+{
+    result := []
+    current := ""
+
+    loop Parse, text
+    {
+        char := A_LoopField
+        if (InStr(delimiters, char))
+        {
+            if (current != "")
+                result.Push(current)
+            result.Push(char)
+            current := ""
+        }
+        else
+            current .= char
+    }
+    if (current != "")
+        result.Push(current)
+
+    return result
+}
+
 ; 显示tooltip并自动更新手柄和输入框位置（避免tooltip盖住手柄）
 show_tooltip_and_update_handle(text, x, y)
 {
     global g_dh, g_eb, g_drag_handle_height
     handle_width := 30
 
-    ; 显示tooltip并获取实际位置（经过边界调整）
-    tooltip_info := btt(text, Integer(x), Integer(y),,OwnzztooltipStyle1,{Transparent:180,DistanceBetweenMouseXAndToolTip:-100,DistanceBetweenMouseYAndToolTip:-20})
+    ; ========== 宽度限制：600px智能换行 ==========
+    wrapped_text := text
+    if (g_eb && g_eb.ui)
+    {
+        renderer := g_eb.ui
+        font_size := OwnzztooltipStyle1.FontSize
+        font_family := "Arial"
+        wrapped_text := wrap_text_word_aware(text, 600, font_size, font_family, renderer)
+    }
+    ; ========== 换行处理结束 ==========
+
+    ; 显示tooltip并获取实际位置（经过边界调整，使用换行后的文本）
+    tooltip_info := btt(wrapped_text, Integer(x), Integer(y),,OwnzztooltipStyle1,{Transparent:180,DistanceBetweenMouseXAndToolTip:-100,DistanceBetweenMouseYAndToolTip:-20})
 
     ; 边缘检测：tooltip的固有行为
     ; 唯一排除：拖拽进行中时不检测（避免闪烁）
@@ -91,8 +161,8 @@ show_tooltip_and_update_handle(text, x, y)
                     new_y := tooltip_info.Y + 5  ; 基于调整后的位置再向下缩5px
             }
 
-            ; 重新显示tooltip（使用新的安全位置）
-            tooltip_info := btt(text, Integer(new_x), Integer(new_y),,OwnzztooltipStyle1,{Transparent:180,DistanceBetweenMouseXAndToolTip:-100,DistanceBetweenMouseYAndToolTip:-20})
+            ; 重新显示tooltip（使用新的安全位置，使用换行后的文本）
+            tooltip_info := btt(wrapped_text, Integer(new_x), Integer(new_y),,OwnzztooltipStyle1,{Transparent:180,DistanceBetweenMouseXAndToolTip:-100,DistanceBetweenMouseYAndToolTip:-20})
         }
     }
 
@@ -108,8 +178,8 @@ show_tooltip_and_update_handle(text, x, y)
     }
 
     ; 同时更新输入框位置：在tooltip下方，左对齐tooltip
-    ; 输入框X = tooltip.X，输入框Y = tooltip.Y + 固化高度（即使tooltip换行增高也不改变）
-    g_eb.move(tooltip_info.X, tooltip_info.Y + g_drag_handle_height)
+    ; 输入框X = tooltip.X，输入框Y = tooltip.Y + tooltip实际高度（考虑换行后的高度）
+    g_eb.move(tooltip_info.X, tooltip_info.Y + tooltip_info.H)
 
     return tooltip_info
 }
@@ -693,8 +763,8 @@ open_translator(*)
     ; 显示拖拽手柄（使用固化高度，即使后续tooltip换行增高也不改变）
     g_dh.show_with_height(handle_x, handle_y, handle_width, g_drag_handle_height)
 
-    ; 显示输入框（在tooltip下方，左对齐tooltip）
-    g_eb.show(tooltip_info.X, y)
+    ; 显示输入框（在tooltip下方，左对齐tooltip，考虑tooltip换行后的高度）
+    g_eb.show(tooltip_info.X, tooltip_info.Y + tooltip_info.H)
 }
 ON_WM_KEYDOWN(wParam, lParam, msg, hwnd)
 {
@@ -730,11 +800,8 @@ DragUpdateTimer()
     ; 手柄宽度
     handle_width := 30
 
-    ; 移动输入框（在tooltip下方，左对齐tooltip）
-    ; 手柄在y，tooltip也在y（同一行），输入框在y+固化高度（tooltip下方）
-    g_eb.move(x + handle_width, y + g_drag_handle_height)
-
     ; 更新 Tooltip 位置和内容（在手柄右侧，同一行）
+    ; 注意：show_tooltip_and_update_handle() 会自动更新输入框位置到tooltip下方
     display_name := get_service_display_with_status()
     if (g_eb.translation_result != "")
     {
