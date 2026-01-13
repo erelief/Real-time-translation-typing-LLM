@@ -8,7 +8,7 @@
 #include <LLM_Translator>
 #include ./utility/lol_game.ah2
 
-logger.is_log_open := false
+logger.is_log_open := false  ; 关闭日志
 logger.is_use_editor := true
 logger.level := 4
 
@@ -289,26 +289,26 @@ cleanup_translator()
     g_eb.debounce_timer := 0
 }
 
-; ========== 光标闪烁定时器 ==========
-toggle_cursor_blink()
-{
-    global g_cursor_visible, g_eb, g_cursor_blink_timer
-
-    ; 如果输入框已隐藏，停止闪烁
-    if (!g_eb.show_status)
-    {
-        if (g_cursor_blink_timer)
-            SetTimer(g_cursor_blink_timer, 0)
-        g_cursor_blink_timer := 0
-        return
-    }
-
-    ; 切换光标可见状态
-    g_cursor_visible := !g_cursor_visible
-
-    ; 重绘输入框以显示/隐藏光标（不触发翻译）
-    g_eb.draw(0, false)
-}
+; ========== 光标闪烁定时器（已弃用 - 方案A：光标常亮）==========
+; toggle_cursor_blink()
+; {
+;     global g_cursor_visible, g_eb, g_cursor_blink_timer
+;
+;     ; 如果输入框已隐藏，停止闪烁
+;     if (!g_eb.show_status)
+;     {
+;         if (g_cursor_blink_timer)
+;             SetTimer(g_cursor_blink_timer, 0)
+;         g_cursor_blink_timer := 0
+;         return
+;     }
+;
+;     ; 切换光标可见状态
+;     g_cursor_visible := !g_cursor_visible
+;
+;     ; 重绘输入框以显示/隐藏光标（不触发翻译）
+;     g_eb.draw(0, false)
+; }
 
 main()
 main()
@@ -426,12 +426,15 @@ main()
     ; 更新 tooltip 样式字体大小
     OwnzztooltipStyle1.FontSize := g_ui_font_tooltip_size
 
-    ; 光标闪烁相关变量
-    global g_cursor_visible := true  ; 光标可见状态
-    global g_cursor_blink_timer := 0  ; 光标闪烁定时器
+    ; 【方案A：光标常亮】光标闪烁相关变量（已弃用）
+    ; global g_cursor_visible := true  ; 光标可见状态
+    ; global g_cursor_blink_timer := 0  ; 光标闪烁定时器
 
     ; 拖拽把手高度（首次打开翻译器时固化tooltip首行高度）
     global g_drag_handle_height := 0
+
+    ; 输入框宽度限制（测试800px）
+    global MAX_INPUT_WIDTH := 800
 
     zmq_version(&a := 0, &b := 0, &c := 0)
     logger.info("版本: ", a, b, c)
@@ -559,7 +562,7 @@ copy(*)
 
 paste(*)
 {
-    g_eb.text := A_Clipboard
+    g_eb.set_text(A_Clipboard)
     g_eb.draw()
 }
 
@@ -669,14 +672,12 @@ tab_send(*)
     g_eb.translation_result := ""
     g_translation_completed := false
 
-    display_name := get_service_display_with_status()
-    logger.info('=========' display_name)
-
     ; 获取手柄当前位置
     pos := g_dh.get_gui_pos()
     handle_width := 30
 
     ; 使用手柄位置显示tooltip（在手柄右侧，同一行）
+    display_name := get_service_display_with_status()
     btt('[' display_name ']', Integer(pos.x + handle_width), Integer(pos.y),,OwnzztooltipStyle1,{Transparent:180,DistanceBetweenMouseXAndToolTip:-100,DistanceBetweenMouseYAndToolTip:-20})
 
     ; 确保手柄显示（防止在输入过程中丢失）
@@ -788,7 +789,7 @@ ON_WM_KEYDOWN(wParam, lParam, msg, hwnd)
     if (hwnd != g_eb.ui.Hwnd)
         return
 
-    ; VK_LEFT = 37, VK_RIGHT = 39
+    ; VK_LEFT = 37, VK_RIGHT = 39, VK_UP = 38, VK_DOWN = 40
     if (wParam == 37)
     {
         g_eb.left()
@@ -796,6 +797,14 @@ ON_WM_KEYDOWN(wParam, lParam, msg, hwnd)
     else if (wParam == 39)
     {
         g_eb.right()
+    }
+    else if (wParam == 38)
+    {
+        g_eb.up()
+    }
+    else if (wParam == 40)
+    {
+        g_eb.down()
     }
 }
 
@@ -850,7 +859,7 @@ ON_WM_LBUTTONDOWN(wParam, lParam, msg, hwnd)
 ; 进入拖拽模式：启动定时器更新输入框位置
 ON_WM_ENTERSIZEMOVE(wParam, lParam, msg, hwnd)
 {
-    global g_dh, g_cursor_blink_timer, g_cursor_visible, g_eb
+    global g_dh, g_eb
 
     ; 只处理手柄窗口的消息
     if (hwnd != g_dh.ui.Hwnd)
@@ -858,12 +867,9 @@ ON_WM_ENTERSIZEMOVE(wParam, lParam, msg, hwnd)
 
     logger.info(">>> 进入拖拽模式，启动定时器")
 
-    ; 停止光标闪烁并隐藏光标
-    if (g_cursor_blink_timer)
-        SetTimer(g_cursor_blink_timer, 0)
-    g_cursor_visible := false
+    ; 【方案A：光标常亮】拖拽时保持光标显示，不需要停止闪烁
 
-    ; 立即重绘以隐藏光标（使用简化绘制）
+    ; 立即重绘（光标仍然显示）
     g_eb.draw_fast()
 
     ; 每 16ms 更新一次（约 60fps）
@@ -874,7 +880,7 @@ ON_WM_ENTERSIZEMOVE(wParam, lParam, msg, hwnd)
 ON_WM_EXITSIZEMOVE(wParam, lParam, msg, hwnd)
 {
     global g_dh, g_eb, g_window_hwnd, g_cursor_x, g_cursor_y
-    global g_manual_positions, g_cursor_blink_timer, g_cursor_visible
+    global g_manual_positions
 
     ; 只处理手柄窗口的消息
     if (hwnd != g_dh.ui.Hwnd)
@@ -886,9 +892,7 @@ ON_WM_EXITSIZEMOVE(wParam, lParam, msg, hwnd)
     ; 标记拖拽结束
     g_dh.is_dragging := false
 
-    ; 恢复光标闪烁
-    g_cursor_visible := true
-    g_cursor_blink_timer := SetTimer(toggle_cursor_blink, 530)
+    ; 【方案A：光标常亮】不需要恢复闪烁定时器
 
     ; 保存位置（使用控件句柄作为键）
     pos := g_dh.get_gui_pos()
@@ -1112,6 +1116,29 @@ class Edit_box
         if g_eb
             g_eb.on_change(name, text)
     }
+
+    ; 【新方案】插入光标字符到文本中（使用 ▌ 作为光标）
+    insert_cursor_char(text, insert_pos, cursor_char := "▌")
+    {
+        text_len := StrLen(text)
+
+        ; 特殊情况：光标在末尾 (insert_pos = 0)
+        if (insert_pos <= 0)
+            return text . cursor_char
+
+        ; 特殊情况：光标在开头 (insert_pos >= text_len)
+        if (insert_pos >= text_len)
+            return cursor_char . text
+
+        ; 正常情况：光标在中间
+        ; insert_pos 是距离末尾的距离，转换为从开头的位置
+        cursor_index := text_len - insert_pos
+        part1 := SubStr(text, 1, cursor_index)
+        part2 := SubStr(text, cursor_index + 1)
+
+        return part1 . cursor_char . part2
+    }
+
     debug()
     {
         ; 显示当前LLM配置信息
@@ -1209,28 +1236,20 @@ class Edit_box
     }
     show(x := 0, y := 0)
     {
-        global g_cursor_blink_timer, g_cursor_visible
         this.ui.gui.show('x' x ' y' y)
         this.show_status := true
 
-        ; 重置光标状态并启动闪烁
-        g_cursor_visible := true
-        g_cursor_blink_timer := SetTimer(toggle_cursor_blink, 530)
+        ; 【方案A：光标常亮】不使用闪烁定时器
 
         this.draw()  ; 立即绘制，避免白框
     }
     hide()
     {
-        global g_cursor_blink_timer
-
         ; 隐藏窗口
         this.ui.gui.hide()
         this.show_status := false
 
-        ; 停止光标闪烁定时器
-        if (g_cursor_blink_timer)
-            SetTimer(g_cursor_blink_timer, 0)
-        g_cursor_blink_timer := 0
+        ; 【方案A：光标常亮】不需要停止闪烁定时器
 
         ; 调用统一清理函数（清除内容、状态、tooltip、防抖定时器）
         cleanup_translator()
@@ -1250,12 +1269,13 @@ class Edit_box
         ui := this.ui
         this.is_drawing := true
 
-        global g_ui_font_family, g_ui_font_input_size
+        global g_ui_font_family, g_ui_font_input_size, MAX_INPUT_WIDTH
 
         try
         {
-            ; 获取显示文本（空格替换为␣）
-            display_text := this.get_display_text()
+            ; 【新方案】在文本中插入光标字符（▌）
+            text_with_cursor := this.insert_cursor_char(this.text, this.insert_pos, "▌")
+            display_text := this.get_display_text(text_with_cursor)
 
             ; 计算文本宽度
             wh := this.ui.GetTextWidthHeight(display_text, g_ui_font_input_size, g_ui_font_family)
@@ -1263,10 +1283,17 @@ class Edit_box
             if(ui.BeginDraw())
             {
                 ui.FillRoundedRectangle(0, 0, wh.width, wh.height, 5, 5, 0xcc1E1E1E)
-                ; ui.DrawRoundedRectangle(0, 0, wh.width, wh.height, 5, 5, 0xffff0000, 1)  ; 红色边框已注释
 
                 ; 统一绘制文本（空格显示为␣，统一颜色）
-                ui.DrawText(display_text, 0, 0, g_ui_font_input_size, 0xFFC9E47E, g_ui_font_family)
+                if (wh.width > MAX_INPUT_WIDTH)
+                {
+                    ui.DrawText(display_text, 0, 0, g_ui_font_input_size, 0xFFC9E47E, g_ui_font_family, "w" . MAX_INPUT_WIDTH)
+                }
+                else
+                {
+                    ui.DrawText(display_text, 0, 0, g_ui_font_input_size, 0xFFC9E47E, g_ui_font_family)
+                }
+
                 ui.EndDraw()
             }
         }
@@ -1282,7 +1309,7 @@ class Edit_box
         if (this.is_drawing)
             return
 
-        global g_current_api, g_translators, g_config, g_dh, g_cursor_visible
+        global g_current_api, g_translators, g_config, g_dh
         global g_ui_font_family, g_ui_font_input_size
         ui := this.ui
         ui.gui.GetPos(&x, &y, &w, &h)
@@ -1317,7 +1344,22 @@ class Edit_box
             ; 计算文字的大小
             wh := this.ui.GetTextWidthHeight(display_text, g_ui_font_input_size, g_ui_font_family)
             ; logger.info(wh)  ; 性能优化：移除绘制函数中的日志
-            this.move(x, y, wh.width + 100, wh.height + 100)
+
+            ; 【重要】直接测量单行高度（避免统计换行符的复杂逻辑）
+            ; 使用单个字符测量，确保得到准确的单行高度
+            single_line_wh := this.ui.GetTextWidthHeight("A", g_ui_font_input_size, g_ui_font_family)
+            single_line_height := single_line_wh.height
+
+            ; 【测试】输入框宽度限制为800px
+            global MAX_INPUT_WIDTH
+            draw_width := wh.width
+            draw_height := wh.height
+
+            if (wh.width > MAX_INPUT_WIDTH)
+            {
+                ; 超过800px，限制宽度并测试Direct2D是否自动换行
+                draw_width := MAX_INPUT_WIDTH
+            }
 
             ; 只在输入为空时显示服务名 Tooltip（避免频繁更新）
             if (this.text = "")
@@ -1329,31 +1371,37 @@ class Edit_box
                 display_name := get_service_display_with_status()
                 btt('[' display_name ']', Integer(pos.x + handle_width), Integer(pos.y),,OwnzztooltipStyle1,{Transparent:180,DistanceBetweenMouseXAndToolTip:-100,DistanceBetweenMouseYAndToolTip:-20})
             }
+
+            ; 【方案A：光标常亮】在文本中插入光标字符（▌），让 Direct2D 自动处理位置
+            ; 光标一直显示，不闪烁
+            ; 先插入光标字符
+            text_with_cursor := this.insert_cursor_char(this.text, this.insert_pos, "▌")
+            display_text := this.get_display_text(text_with_cursor)
+
+            ; 重新测量带光标的文本宽度（必须在 BeginDraw() 之前）
+            wh_cursor := this.ui.GetTextWidthHeight(display_text, g_ui_font_input_size, g_ui_font_family)
+
+            ; 使用带光标的文本宽度移动窗口（只移动一次，避免闪烁）
+            draw_width := wh_cursor.width
+            this.move(x, y, draw_width + 100, draw_height + 100)
+
             if(ui.BeginDraw())
             {
-                ui.FillRoundedRectangle(0, 0, wh.width, wh.height, 5, 5, 0xcc1E1E1E)
-                ; ui.DrawRoundedRectangle(0, 0, wh.width, wh.height, 5, 5, 0xffff0000, 1)  ; 红色边框已注释
+                ; 【测试】使用限制宽度绘制背景
+                ui.FillRoundedRectangle(0, 0, draw_width, draw_height, 5, 5, 0xcc1E1E1E)
+                ; ui.DrawRoundedRectangle(0, 0, draw_width, draw_height, 5, 5, 0xffff0000, 1)  ; 红色边框已注释
 
-                ; 统一绘制文本（空格显示为␣，统一颜色）
-                ui.DrawText(display_text, 0, 0, g_ui_font_input_size, 0xFFC9E47E, g_ui_font_family, "h" wh.height)
-
-                ; 绘制光标（只在有焦点且可见状态时显示）
-                if (g_cursor_visible)
+                ; 【新方案】统一绘制文本（空格显示为␣，统一颜色）
+                ; 关键测试：添加 w800 参数，测试 Direct2D 是否自动换行
+                if (wh_cursor.width > MAX_INPUT_WIDTH)
                 {
-                    ; 计算末尾 insert_pos 个字符的实际绘制宽度（使用替换后的文本）
-                    tail_width := 0
-                    if (this.insert_pos > 0 && this.text != "")
-                    {
-                        ; 从末尾取 insert_pos 个字符并替换空格
-                        tail_text := this.get_display_text(SubStr(this.text, -this.insert_pos))
-                        tail_wh := this.ui.GetTextWidthHeight(tail_text, g_ui_font_input_size, g_ui_font_family)
-                        tail_width := tail_wh.width
-                    }
-
-                    ; 光标位置：实际绘制总宽度 - 末尾字符的实际宽度
-                    cursor_x := wh.width - tail_width
-                    ; 绘制闪烁的竖线光标（2px宽，白色）
-                    ui.DrawLine(cursor_x, 2, cursor_x, wh.height - 2, 0xFFFFFFFF, 2)
+                    ; 超过宽度限制，测试Direct2D自动换行
+                    ui.DrawText(display_text, 0, 0, g_ui_font_input_size, 0xFFC9E47E, g_ui_font_family, "w" . draw_width . " h" . draw_height)
+                }
+                else
+                {
+                    ; 未超过宽度限制，使用原有方式
+                    ui.DrawText(display_text, 0, 0, g_ui_font_input_size, 0xFFC9E47E, g_ui_font_family, "h" . draw_height)
                 }
 
                 ; logger.err(this.text)  ; 性能优化：移除绘制函数中的日志
@@ -1411,8 +1459,8 @@ class Edit_box
     {
         ; logger.info(char)  ; 性能优化：移除热路径日志
         ; logger.err(this.text)  ; 性能优化：移除热路径日志
-        left_txt := SubStr(this.text, 1, StrLen(this.text) - this.insert_pos)
-        right_txt := SubStr(this.text, -this.insert_pos)
+        local left_txt := SubStr(this.text, 1, StrLen(this.text) - this.insert_pos)
+        local right_txt := SubStr(this.text, -this.insert_pos)
         ; logger.err(left_txt, right_txt)  ; 性能优化：移除热路径日志
         if(char == '`b')
         {
@@ -1427,6 +1475,7 @@ class Edit_box
     set_text(text)
     {
         this.text := text
+        this.insert_pos := 0
     }
     left()
     {
@@ -1439,6 +1488,286 @@ class Edit_box
         if(this.insert_pos > 0)
             this.insert_pos -= 1
         this.draw(0, false)  ; 只重绘光标位置，不触发翻译
+    }
+    up()
+    {
+        ; 【新增】向上移动光标（到上一行的相同列位置）
+        global MAX_INPUT_WIDTH, g_ui_font_input_size, g_ui_font_family
+
+        ; 只在多行文本时支持上下移动
+        text_len := StrLen(this.text)
+        if (text_len = 0)
+            return
+
+        ; 测量总宽度
+        display_text := this.get_display_text()
+        wh := this.ui.GetTextWidthHeight(display_text, g_ui_font_input_size, g_ui_font_family)
+
+        ; 判断是否需要多行处理：自动换行 OR 手动回车
+        has_newline := InStr(this.text, "`n") || InStr(this.text, "`r")
+        needs_multiline := (wh.width > MAX_INPUT_WIDTH) || has_newline
+
+        if (!needs_multiline)
+            return  ; 单行文本，不处理
+
+        ; 【重要】获取单行高度
+        single_line_wh := this.ui.GetTextWidthHeight("A", g_ui_font_input_size, g_ui_font_family)
+        single_line_height := single_line_wh.height
+
+        ; 构建行结构：每一行的起始字符索引（1-based）
+        lines := []  ; [{start: 1, chars_before: 0}, {start: 10, chars_before: 9}, ...]
+
+        current_line_width := 0
+        current_line_start := 1  ; 当前行起始字符位置（1-based）
+
+        for char_index, char in StrSplit(this.text)
+        {
+            ; 【修复】处理回车换行符（避免 \r\n 被处理成两次换行）
+            if (char = "`r")
+            {
+                ; 检查下一个字符是否是 `\n`，如果是则跳过 `\r`
+                next_char := SubStr(this.text, char_index + 1, 1)
+                if (next_char = "`n")
+                {
+                    ; 遇到 `\r\n`，记录换行并跳过 `\r`
+                    lines.Push({start: current_line_start, chars_before: current_line_start - 1})
+                    current_line_start := char_index + 1  ; 注意：+1 是跳过 `\r`，`\n` 会再处理
+                    current_line_width := 0
+                    continue
+                }
+
+                ; 单独的 `\r`（Mac 风格），正常处理换行
+                lines.Push({start: current_line_start, chars_before: current_line_start - 1})
+                current_line_start := char_index + 1
+                current_line_width := 0
+                continue
+            }
+
+            if (char = "`n")
+            {
+                ; 【修复】处理换行符
+                lines.Push({start: current_line_start, chars_before: current_line_start - 1})
+                current_line_start := char_index + 1
+                current_line_width := 0
+                continue
+            }
+
+            display_char := this.get_display_text(char)
+            char_wh := this.ui.GetTextWidthHeight(display_char, g_ui_font_input_size, g_ui_font_family)
+            char_width := char_wh.width
+
+            ; 如果加上这个字符会超过宽度，换行
+            if (current_line_width + char_width > MAX_INPUT_WIDTH && current_line_width > 0)
+            {
+                ; 保存上一行的信息
+                lines.Push({start: current_line_start, chars_before: current_line_start - 1})
+
+                ; 开始新行
+                current_line_start := char_index
+                current_line_width := 0
+            }
+
+            current_line_width += char_width
+        }
+
+        ; 保存最后一行
+        lines.Push({start: current_line_start, chars_before: current_line_start - 1})
+
+        ; 找到当前光标所在行
+        cursor_from_end := this.insert_pos
+        cursor_abs_pos := text_len - cursor_from_end
+
+        current_line_index := 1  ; 默认第一行
+        for line_index, line_info in lines
+        {
+            if (line_info.start <= cursor_abs_pos)
+            {
+                current_line_index := line_index
+            }
+            else
+            {
+                break
+            }
+        }
+
+        ; 边界检查：如果行号无效，不处理
+        if (current_line_index < 1 || current_line_index > lines.Length)
+            return
+
+        ; 如果已经在第一行，不能向上移动
+        if (current_line_index <= 1)
+            return
+
+        ; 计算当前光标在当前行中的列位置（从行首开始的字符数）
+        current_line_info := lines[current_line_index]
+        chars_before_cursor_in_line := cursor_abs_pos - current_line_info.chars_before - 1
+
+        ; 移动到上一行的相同列位置
+        target_line_index := current_line_index - 1
+        target_line_info := lines[target_line_index]
+
+        ; 找到上一行的末尾位置
+        if (target_line_index < lines.Length)
+        {
+            next_line_start := lines[target_line_index + 1].start
+            target_line_length := next_line_start - target_line_info.start - 1
+        }
+        else
+        {
+            target_line_length := text_len - target_line_info.chars_before - 1
+        }
+
+        ; 如果上一行较短，移到上一行末尾
+        if (chars_before_cursor_in_line > target_line_length)
+        {
+            chars_before_cursor_in_line := target_line_length
+        }
+
+        ; 计算新的 insert_pos
+        new_cursor_abs_pos := target_line_info.start + chars_before_cursor_in_line
+        this.insert_pos := text_len - new_cursor_abs_pos
+
+        this.draw(0, false)
+    }
+    down()
+    {
+        ; 【新增】向下移动光标（到下一行的相同列位置）
+        global MAX_INPUT_WIDTH, g_ui_font_input_size, g_ui_font_family
+
+        ; 只在多行文本时支持上下移动
+        text_len := StrLen(this.text)
+        if (text_len = 0)
+            return
+
+        ; 测量总宽度
+        display_text := this.get_display_text()
+        wh := this.ui.GetTextWidthHeight(display_text, g_ui_font_input_size, g_ui_font_family)
+
+        ; 判断是否需要多行处理：自动换行 OR 手动回车
+        has_newline := InStr(this.text, "`n") || InStr(this.text, "`r")
+        needs_multiline := (wh.width > MAX_INPUT_WIDTH) || has_newline
+
+        if (!needs_multiline)
+            return  ; 单行文本，不处理
+
+        ; 【重要】获取单行高度
+        single_line_wh := this.ui.GetTextWidthHeight("A", g_ui_font_input_size, g_ui_font_family)
+        single_line_height := single_line_wh.height
+
+        ; 构建行结构：每一行的起始字符索引（1-based）
+        lines := []  ; [{start: 1, chars_before: 0}, {start: 10, chars_before: 9}, ...]
+
+        current_line_width := 0
+        current_line_start := 1  ; 当前行起始字符位置（1-based）
+
+        for char_index, char in StrSplit(this.text)
+        {
+            ; 【修复】处理回车换行符（避免 \r\n 被处理成两次换行）
+            if (char = "`r")
+            {
+                ; 检查下一个字符是否是 `\n`，如果是则跳过 `\r`
+                next_char := SubStr(this.text, char_index + 1, 1)
+                if (next_char = "`n")
+                {
+                    ; 遇到 `\r\n`，记录换行并跳过 `\r`
+                    lines.Push({start: current_line_start, chars_before: current_line_start - 1})
+                    current_line_start := char_index + 1  ; 注意：+1 是跳过 `\r`，`\n` 会再处理
+                    current_line_width := 0
+                    continue
+                }
+
+                ; 单独的 `\r`（Mac 风格），正常处理换行
+                lines.Push({start: current_line_start, chars_before: current_line_start - 1})
+                current_line_start := char_index + 1
+                current_line_width := 0
+                continue
+            }
+
+            if (char = "`n")
+            {
+                ; 【修复】处理换行符
+                lines.Push({start: current_line_start, chars_before: current_line_start - 1})
+                current_line_start := char_index + 1
+                current_line_width := 0
+                continue
+            }
+
+            display_char := this.get_display_text(char)
+            char_wh := this.ui.GetTextWidthHeight(display_char, g_ui_font_input_size, g_ui_font_family)
+            char_width := char_wh.width
+
+            ; 如果加上这个字符会超过宽度，换行
+            if (current_line_width + char_width > MAX_INPUT_WIDTH && current_line_width > 0)
+            {
+                ; 保存上一行的信息
+                lines.Push({start: current_line_start, chars_before: current_line_start - 1})
+
+                ; 开始新行
+                current_line_start := char_index
+                current_line_width := 0
+            }
+
+            current_line_width += char_width
+        }
+
+        ; 保存最后一行
+        lines.Push({start: current_line_start, chars_before: current_line_start - 1})
+
+        ; 找到当前光标所在行
+        cursor_from_end := this.insert_pos
+        cursor_abs_pos := text_len - cursor_from_end
+
+        current_line_index := 1  ; 默认第一行
+        for line_index, line_info in lines
+        {
+            if (line_info.start <= cursor_abs_pos)
+            {
+                current_line_index := line_index
+            }
+            else
+            {
+                break
+            }
+        }
+
+        ; 边界检查：如果行号无效，不处理
+        if (current_line_index < 1 || current_line_index > lines.Length)
+            return
+
+        ; 如果已经在最后一行，不能向下移动
+        if (current_line_index >= lines.Length)
+            return
+
+        ; 计算当前光标在当前行中的列位置（从行首开始的字符数）
+        current_line_info := lines[current_line_index]
+        chars_before_cursor_in_line := cursor_abs_pos - current_line_info.chars_before - 1
+
+        ; 移动到下一行的相同列位置
+        target_line_index := current_line_index + 1
+        target_line_info := lines[target_line_index]
+
+        ; 找到下一行的末尾位置
+        if (target_line_index < lines.Length)
+        {
+            next_line_start := lines[target_line_index + 1].start
+            target_line_length := next_line_start - target_line_info.start - 1
+        }
+        else
+        {
+            target_line_length := text_len - target_line_info.chars_before - 1
+        }
+
+        ; 如果下一行较短，移到下一行末尾
+        if (chars_before_cursor_in_line > target_line_length)
+        {
+            chars_before_cursor_in_line := target_line_length
+        }
+
+        ; 计算新的 insert_pos
+        new_cursor_abs_pos := target_line_info.start + chars_before_cursor_in_line
+        this.insert_pos := text_len - new_cursor_abs_pos
+
+        this.draw(0, false)
     }
     set_imm(char)
     {
