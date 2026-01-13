@@ -114,19 +114,8 @@ show_tooltip_and_update_handle(text, x, y)
     global g_dh, g_eb, g_drag_handle_height
     handle_width := 30
 
-    ; ========== 宽度限制：600px智能换行 ==========
-    wrapped_text := text
-    if (g_eb && g_eb.ui)
-    {
-        renderer := g_eb.ui
-        font_size := OwnzztooltipStyle1.FontSize
-        font_family := "Arial"
-        wrapped_text := wrap_text_word_aware(text, 600, font_size, font_family, renderer)
-    }
-    ; ========== 换行处理结束 ==========
-
-    ; 显示tooltip并获取实际位置（经过边界调整，使用换行后的文本）
-    tooltip_info := btt(wrapped_text, Integer(x), Integer(y),,OwnzztooltipStyle1,{Transparent:180,DistanceBetweenMouseXAndToolTip:-100,DistanceBetweenMouseYAndToolTip:-20})
+    ; 显示tooltip并获取实际位置（不使用换行预处理，让BTT自己处理）
+    tooltip_info := btt(text, Integer(x), Integer(y),, OwnzztooltipStyle1, {Transparent:180, DistanceBetweenMouseXAndToolTip:-100, DistanceBetweenMouseYAndToolTip:-20})
 
     ; 边缘检测：tooltip的固有行为
     ; 唯一排除：拖拽进行中时不检测（避免闪烁）
@@ -161,8 +150,8 @@ show_tooltip_and_update_handle(text, x, y)
                     new_y := tooltip_info.Y + 5  ; 基于调整后的位置再向下缩5px
             }
 
-            ; 重新显示tooltip（使用新的安全位置，使用换行后的文本）
-            tooltip_info := btt(wrapped_text, Integer(new_x), Integer(new_y),,OwnzztooltipStyle1,{Transparent:180,DistanceBetweenMouseXAndToolTip:-100,DistanceBetweenMouseYAndToolTip:-20})
+            ; 重新显示tooltip（使用新的安全位置）
+            tooltip_info := btt(text, Integer(new_x), Integer(new_y),, OwnzztooltipStyle1, {Transparent:180, DistanceBetweenMouseXAndToolTip:-100, DistanceBetweenMouseYAndToolTip:-20})
         }
     }
 
@@ -716,6 +705,13 @@ open_translator(*)
     {
         g_window_hwnd := WinExist("A")
         MouseGetPos(&x, &y)
+    }
+
+    ; 检查窗口句柄是否有效
+    if (!g_window_hwnd)
+    {
+        logger.info("错误：无法获取有效窗口句柄")
+        return
     }
 
     ; 获取进程名，用于位置记忆

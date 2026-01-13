@@ -302,6 +302,8 @@ Class BeautifulToolTip extends Map
         TargetSize:=this._CalculateDisplayPosition(&X, &Y, "", "", O, GetTargetSize:=1)
       ; 使得 文字区域+边距+细边框 不会超过目标宽度。
       , MaxTextWidth:=TargetSize.W - O.Margin*2 - O.Border*2
+      ; 限制最大宽度为800px（翻译结果tooltip专用）
+      , MaxTextWidth:=Min(MaxTextWidth, 800)
       ; 使得 文字区域+边距+细边框 不会超过目标高度的90%。
       ; 之所以高度限制90%是因为两个原因，1是留出一些上下的空白，避免占满全屏，鼠标点不了其它地方，难以退出。
       ; 2是在计算文字区域时，即使已经给出了宽高度限制，且因为自动换行的原因，宽度的返回值通常在范围内，但高度的返回值偶尔还是会超过1行，所以提前留个余量。
@@ -474,13 +476,10 @@ Class BeautifulToolTip extends Map
     hFont := Gdip_FontCreate(hFontFamily, Options.FontSize * Options.DPIScale, Style)
     ; 设置文字格式化样式，LineLimit = 0x00002000 只显示完整的行。
     ; 比如最后一行，因为布局高度有限，只能显示出一半，此时就会让它完全不显示。
-    ; 直接使用 Gdip_StringFormatGetGeneric(1) 包含 LineLimit 设置，同时可以实现左右空白区域最小化。
-    ; 但这样有个副作用，那就是无法精确的设置文本框的宽度了，同时最右边文字的间距会被压缩。
-    ; 例如指定宽度800，可能返回的宽度是793，因为右边没有用空白补上。
-    ; 好处是右边几乎没有空白区域，左边也没有，所以接近完美的实现文字居中了。
-    ; hStringFormat := Gdip_StringFormatCreate(0x00002000)
-    ; if !hStringFormat
-      hStringFormat := Gdip_StringFormatGetGeneric(1)
+    ; 先获取默认格式，然后强制设置左对齐
+    hStringFormat := Gdip_StringFormatGetGeneric(0)
+    ; 强制设置左对齐和禁用自动调整字间距
+    Gdip_SetStringFormatAlign(hStringFormat, Align:=0)  ; 0 = Near (左对齐)
 
     ; 准备文本画刷
     if (Options.TCLGA!="" and Options.TCLGM and Options.TCLGS and Options.TCLGE
@@ -1370,6 +1369,12 @@ CreateRect(&Rect, x, y, w, h)
 {
 	Rect := Buffer(16)
 	NumPut("UInt", x, Rect, 0), NumPut("UInt", y, Rect, 4), NumPut("UInt", w, Rect, 8), NumPut("UInt", h, Rect, 12)
+}
+
+Gdip_StringFormatCreate(Format:=0, Lang:=0)
+{
+	DllCall("gdiplus\GdipCreateStringFormat", "Int", Format, "Int", Lang, "UPtr*", &hFormat:=0)
+	return hFormat
 }
 
 ;=======================================Gdip与BTT完===============================================================
