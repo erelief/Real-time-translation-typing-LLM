@@ -1273,25 +1273,33 @@ class Edit_box
 
         try
         {
-            ; 【新方案】在文本中插入光标字符（▌）
+            ; 统一渲染：光标始终存在，直接测量带光标的完整文本
+            ; 1. 插入光标字符
             text_with_cursor := this.insert_cursor_char(this.text, this.insert_pos, "▌")
             display_text := this.get_display_text(text_with_cursor)
 
-            ; 计算文本宽度
+            ; 2. 测量带光标的完整文本尺寸（一次性获取宽度和高度）
             wh := this.ui.GetTextWidthHeight(display_text, g_ui_font_input_size, g_ui_font_family)
+            draw_width := wh.width
+            draw_height := wh.height
+
+            ; 3. 应用宽度限制
+            if (draw_width > MAX_INPUT_WIDTH)
+                draw_width := MAX_INPUT_WIDTH
 
             if(ui.BeginDraw())
             {
-                ui.FillRoundedRectangle(0, 0, wh.width, wh.height, 5, 5, 0xcc1E1E1E)
+                ; 4. 绘制背景
+                ui.FillRoundedRectangle(0, 0, draw_width, draw_height, 5, 5, 0xcc1E1E1E)
 
-                ; 统一绘制文本（空格显示为␣，统一颜色）
+                ; 5. 统一绘制文本（总是传递完整尺寸参数）
                 if (wh.width > MAX_INPUT_WIDTH)
                 {
-                    ui.DrawText(display_text, 0, 0, g_ui_font_input_size, 0xFFC9E47E, g_ui_font_family, "w" . MAX_INPUT_WIDTH)
+                    ui.DrawText(display_text, 0, 0, g_ui_font_input_size, 0xFFC9E47E, g_ui_font_family, "w" . draw_width . " h" . draw_height)
                 }
                 else
                 {
-                    ui.DrawText(display_text, 0, 0, g_ui_font_input_size, 0xFFC9E47E, g_ui_font_family)
+                    ui.DrawText(display_text, 0, 0, g_ui_font_input_size, 0xFFC9E47E, g_ui_font_family, "h" . draw_height)
                 }
 
                 ui.EndDraw()
@@ -1323,42 +1331,37 @@ class Edit_box
             ; 拖拽时简化绘制，不执行复杂操作
             if (g_dh.is_dragging)
             {
-                ; 只绘制内容，不执行翻译和 tooltip 更新
-                display_text := this.get_display_text()
+                ; 统一渲染：光标始终存在，直接测量带光标的完整文本
+                ; 1. 插入光标字符
+                text_with_cursor := this.insert_cursor_char(this.text, this.insert_pos, "▌")
+                display_text := this.get_display_text(text_with_cursor)
+
+                ; 2. 测量带光标的完整文本尺寸
                 wh := this.ui.GetTextWidthHeight(display_text, g_ui_font_input_size, g_ui_font_family)
+                draw_width := wh.width
+                draw_height := wh.height
+
+                ; 3. 应用宽度限制
+                if (draw_width > MAX_INPUT_WIDTH)
+                    draw_width := MAX_INPUT_WIDTH
+
                 if(ui.BeginDraw())
                 {
-                    ui.FillRoundedRectangle(0, 0, wh.width, wh.height, 5, 5, 0xcc1E1E1E)
-                    ; ui.DrawRoundedRectangle(0, 0, wh.width, wh.height, 5, 5, 0xffff0000, 1)  ; 红色边框已注释
+                    ; 4. 绘制背景
+                    ui.FillRoundedRectangle(0, 0, draw_width, draw_height, 5, 5, 0xcc1E1E1E)
 
-                    ; 统一绘制文本（空格显示为␣，统一颜色）
-                    ui.DrawText(display_text, 0, 0, g_ui_font_input_size, 0xFFC9E47E, g_ui_font_family)
+                    ; 5. 统一绘制文本
+                    if (wh.width > MAX_INPUT_WIDTH)
+                    {
+                        ui.DrawText(display_text, 0, 0, g_ui_font_input_size, 0xFFC9E47E, g_ui_font_family, "w" . draw_width . " h" . draw_height)
+                    }
+                    else
+                    {
+                        ui.DrawText(display_text, 0, 0, g_ui_font_input_size, 0xFFC9E47E, g_ui_font_family, "h" . draw_height)
+                    }
                     ui.EndDraw()
                 }
                 return  ; 拖拽时直接返回，不执行后续的翻译等复杂操作
-            }
-
-            ; 获取显示文本（空格替换为␣）
-            display_text := this.get_display_text()
-
-            ; 计算文字的大小
-            wh := this.ui.GetTextWidthHeight(display_text, g_ui_font_input_size, g_ui_font_family)
-            ; logger.info(wh)  ; 性能优化：移除绘制函数中的日志
-
-            ; 【重要】直接测量单行高度（避免统计换行符的复杂逻辑）
-            ; 使用单个字符测量，确保得到准确的单行高度
-            single_line_wh := this.ui.GetTextWidthHeight("A", g_ui_font_input_size, g_ui_font_family)
-            single_line_height := single_line_wh.height
-
-            ; 【测试】输入框宽度限制为800px
-            global MAX_INPUT_WIDTH
-            draw_width := wh.width
-            draw_height := wh.height
-
-            if (wh.width > MAX_INPUT_WIDTH)
-            {
-                ; 超过800px，限制宽度并测试Direct2D是否自动换行
-                draw_width := MAX_INPUT_WIDTH
             }
 
             ; 只在输入为空时显示服务名 Tooltip（避免频繁更新）
@@ -1372,39 +1375,38 @@ class Edit_box
                 btt('[' display_name ']', Integer(pos.x + handle_width), Integer(pos.y),,OwnzztooltipStyle1,{Transparent:180,DistanceBetweenMouseXAndToolTip:-100,DistanceBetweenMouseYAndToolTip:-20})
             }
 
-            ; 【方案A：光标常亮】在文本中插入光标字符（▌），让 Direct2D 自动处理位置
-            ; 光标一直显示，不闪烁
-            ; 先插入光标字符
+            ; 统一渲染：光标始终存在，直接测量带光标的完整文本
+            ; 1. 插入光标字符
             text_with_cursor := this.insert_cursor_char(this.text, this.insert_pos, "▌")
             display_text := this.get_display_text(text_with_cursor)
 
-            ; 重新测量带光标的文本宽度（必须在 BeginDraw() 之前）
-            wh_cursor := this.ui.GetTextWidthHeight(display_text, g_ui_font_input_size, g_ui_font_family)
+            ; 2. 测量带光标的完整文本尺寸
+            wh := this.ui.GetTextWidthHeight(display_text, g_ui_font_input_size, g_ui_font_family)
+            draw_width := wh.width
+            draw_height := wh.height
 
-            ; 使用带光标的文本宽度移动窗口（只移动一次，避免闪烁）
-            draw_width := wh_cursor.width
+            ; 3. 应用宽度限制
+            if (draw_width > MAX_INPUT_WIDTH)
+                draw_width := MAX_INPUT_WIDTH
+
+            ; 4. 使用限制后的宽度移动窗口
             this.move(x, y, draw_width + 100, draw_height + 100)
 
             if(ui.BeginDraw())
             {
-                ; 【测试】使用限制宽度绘制背景
+                ; 5. 绘制背景
                 ui.FillRoundedRectangle(0, 0, draw_width, draw_height, 5, 5, 0xcc1E1E1E)
-                ; ui.DrawRoundedRectangle(0, 0, draw_width, draw_height, 5, 5, 0xffff0000, 1)  ; 红色边框已注释
 
-                ; 【新方案】统一绘制文本（空格显示为␣，统一颜色）
-                ; 关键测试：添加 w800 参数，测试 Direct2D 是否自动换行
-                if (wh_cursor.width > MAX_INPUT_WIDTH)
+                ; 6. 统一绘制文本（总是传递完整尺寸参数）
+                if (wh.width > MAX_INPUT_WIDTH)
                 {
-                    ; 超过宽度限制，测试Direct2D自动换行
                     ui.DrawText(display_text, 0, 0, g_ui_font_input_size, 0xFFC9E47E, g_ui_font_family, "w" . draw_width . " h" . draw_height)
                 }
                 else
                 {
-                    ; 未超过宽度限制，使用原有方式
                     ui.DrawText(display_text, 0, 0, g_ui_font_input_size, 0xFFC9E47E, g_ui_font_family, "h" . draw_height)
                 }
 
-                ; logger.err(this.text)  ; 性能优化：移除绘制函数中的日志
                 ui.EndDraw()
             }
 
