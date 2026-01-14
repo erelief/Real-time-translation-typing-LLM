@@ -446,7 +446,7 @@ class ID2D1RenderTarget extends ID2D1Resource {
 
 	; Ends drawing operations on the render target and indicates the current error state and associated tags.
 	EndDraw(&tag1 := 0, &tag2 := 0) {
-		ComCall(49, this, 'uint64*', &tag1 := 0, 'uint64*', &tag2 := 0)
+		return ComCall(49, this, 'uint64*', &tag1 := 0, 'uint64*', &tag2 := 0, 'uint')
 	}
 
 	; Retrieves the pixel format and alpha mode of the render target.

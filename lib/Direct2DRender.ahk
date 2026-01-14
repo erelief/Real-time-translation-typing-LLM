@@ -253,17 +253,18 @@ class Direct2DRender
 	;####################################################################################################################################################################################################################################
 	;EndDraw
 	;
-	;return				;				Void
+	;return				;				HRESULT value (0 for success, D2DERR_RECREATE_TARGET if device lost)
 	;
 	;Notes				;				Must always call EndDraw to finish drawing and update the overlay
-	
-	EndDraw() 
+
+	EndDraw()
 	{
 		local pOut:=0
 		if (this.drawing)
 		{
-			this.renderTarget.EndDraw()
+			return this.renderTarget.EndDraw()
 		}
+		return 0  ; S_OK
 	}
 	
 	

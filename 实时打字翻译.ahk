@@ -1056,6 +1056,19 @@ class DragHandle
         return {x: this.x, y: this.y}
     }
 
+    ; 重新创建 Direct2D 资源（用于处理设备丢失错误）
+    recreate_resources()
+    {
+        ; 重新创建 Direct2D 窗口（保持原有尺寸）
+        this.ui := Direct2DRender(0, 0, 30, 34,,, false)
+
+        ; 如果窗口正在显示，重新显示
+        if (this.show_status)
+        {
+            this.ui.gui.show('x' this.x ' y' this.y)
+        }
+    }
+
     draw()
     {
         global g_ui_font_tooltip_size
@@ -1081,7 +1094,12 @@ class DragHandle
             ; 绘制 ≡ 符号（Arial字体）
             ui.DrawText('≡', icon_x, icon_y, icon_size, 0xFF40C1FF, "Arial")
 
-            ui.EndDraw()
+            ; 检查 EndDraw 返回值，处理设备丢失错误
+            hr := ui.EndDraw()
+            if (hr = 0x8899000C)  ; D2DERR_RECREATE_TARGET
+            {
+                this.recreate_resources()
+            }
         }
     }
 }
@@ -1107,6 +1125,19 @@ class Edit_box
 
         ; 重入保护：防止同时调用 draw() 导致 Direct2D 状态冲突
         this.is_drawing := false
+    }
+
+    ; 重新创建 Direct2D 资源（用于处理设备丢失错误）
+    recreate_resources()
+    {
+        ; 获取当前位置和尺寸
+        this.ui.gui.GetPos(&x, &y, &w, &h)
+
+        ; 重新创建 Direct2D 窗口
+        this.ui := Direct2DRender(x, y, w, h,,, true)
+
+        ; 标记需要重绘
+        this.show_status := false
     }
 
     ; 静态回调方法
@@ -1359,7 +1390,13 @@ class Edit_box
                     {
                         ui.DrawText(display_text, 0, 0, g_ui_font_input_size, 0xFFC9E47E, g_ui_font_family, "h" . draw_height)
                     }
-                    ui.EndDraw()
+
+                    ; 检查 EndDraw 返回值，处理设备丢失错误
+                    hr := ui.EndDraw()
+                    if (hr = 0x8899000C)  ; D2DERR_RECREATE_TARGET
+                    {
+                        this.recreate_resources()
+                    }
                 }
                 return  ; 拖拽时直接返回，不执行后续的翻译等复杂操作
             }
@@ -1407,7 +1444,12 @@ class Edit_box
                     ui.DrawText(display_text, 0, 0, g_ui_font_input_size, 0xFFC9E47E, g_ui_font_family, "h" . draw_height)
                 }
 
-                ui.EndDraw()
+                ; 检查 EndDraw 返回值，处理设备丢失错误
+                hr := ui.EndDraw()
+                if (hr = 0x8899000C)  ; D2DERR_RECREATE_TARGET
+                {
+                    this.recreate_resources()
+                }
             }
 
         ; 使用LLM翻译（只有当 trigger_translation 为 true 时才触发）
