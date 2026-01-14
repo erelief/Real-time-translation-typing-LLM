@@ -486,7 +486,7 @@ main()
         TAB : 切换翻译模型
         ESC : 退出
     )'
-    btt(help_text,0, 0,,OwnzztooltipStyle1,{Transparent:180,DistanceBetweenMouseXAndToolTip:-100,DistanceBetweenMouseYAndToolTip:-20})
+    btt(help_text,0, 0, 60000, OwnzztooltipStyle1,{Transparent:180,DistanceBetweenMouseXAndToolTip:-100,DistanceBetweenMouseYAndToolTip:-20})
 }
 
 translate_clipboard(*)
