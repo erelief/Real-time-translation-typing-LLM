@@ -122,7 +122,12 @@ class OpenAI_Compat_LLM
     ; 构建翻译提示词
     build_prompt(text, target_lang)
     {
-        return Format("Translate the following text to {1}. Only output the translated result without any explanation:`n`n{2}", target_lang, text)
+        prompt := "Translate the following text to " . target_lang . ". Only output the translated result without any explanation.`n`n"
+        prompt .= "Punctuation Rule: Match the source text's ending punctuation style:`n"
+        prompt .= "- If source ends with punctuation (。.！!？?，,、), add corresponding punctuation in " . target_lang . "`n"
+        prompt .= "- If source has NO ending punctuation, do NOT add any punctuation`n`n"
+        prompt .= "Source text:`n" . text
+        return prompt
     }
 
     ; 设置回调函数
