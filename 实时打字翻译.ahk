@@ -213,11 +213,31 @@ on_global_mouse_click(*)
 ; 处理Enter键（默认模式：触发翻译/发送；实时模式：直接发送）
 handle_enter_key(*)
 {
-    global g_is_realtime_mode, g_translation_completed, g_eb, g_is_translating
+    global g_is_realtime_mode, g_translation_completed, g_eb, g_is_translating, g_is_info_only, g_dh, g_config
 
     ; 如果正在翻译中，不允许发送
     if (g_is_translating)
         return
+
+    ; 检测是否为斜杠命令
+    input_text := g_eb.text
+    if (SubStr(input_text, 1, 1) == "/")
+    {
+        ; 处理命令
+        if (input_text == "/status")
+        {
+            handle_status_command()
+            return
+        }
+        else
+        {
+            ; 未知命令提示
+            btt("未知命令: " input_text "`n目前只支持 /status", 0, 0,, OwnzztooltipStyle1, {Transparent:180, DistanceBetweenMouseXAndToolTip:-100, DistanceBetweenMouseYAndToolTip:-20})
+            SetTimer(() => OwnzztooltipEnd(), -3000)
+            g_eb.hide()
+            return
+        }
+    }
 
     if (g_is_realtime_mode)
     {
@@ -234,8 +254,29 @@ handle_enter_key(*)
         }
         else
         {
-            ; 第二次Enter：发送结果
-            send_command('translate')
+            ; 第二次Enter：根据结果类型决定发送或重置
+            if (g_is_info_only)
+            {
+                ; 不可发送的结果（如 /status）：重置为初始状态
+                g_eb.clear()
+                g_eb.translation_result := ""
+                g_translation_completed := false
+                g_is_info_only := false
+
+                ; 重新绘制输入框
+                g_eb.draw(0, false)
+
+                ; 重新显示服务名 tooltip（和刚打开 Alt+Y 一样）
+                pos := g_dh.get_gui_pos()
+                handle_width := 30
+                display_name := get_service_display_with_status()
+                show_tooltip_and_update_handle('[' display_name ']', Integer(pos.x + handle_width), Integer(pos.y))
+            }
+            else
+            {
+                ; 可发送的结果（翻译结果）：发送
+                send_command('translate')
+            }
         }
     }
 }
@@ -266,10 +307,32 @@ switch_translation_mode(*)
     logger.info('已切换到:', g_is_realtime_mode ? "实时翻译模式" : "默认发送模式")
 }
 
+; 处理 /status 命令
+handle_status_command(*)
+{
+    global g_eb, g_config, g_current_api, g_target_lang, g_is_realtime_mode, g_translation_completed, g_is_info_only
+
+    ; 构建配置信息
+    api_info := g_config[g_current_api]
+    display_name := get_current_service_display_name()
+    status_text := "服务: " display_name " | 模型: " api_info["model"] " | 语言: " g_target_lang " | 模式: " (g_is_realtime_mode ? "实时" : "默认")
+
+    ; 设置状态
+    g_eb.translation_result := status_text
+    g_translation_completed := true
+    g_is_info_only := true  ; 标记为信息，不可发送
+
+    ; 直接调用 on_change 显示结果（完全复用翻译流程）
+    g_eb.on_change(g_current_api, status_text)
+
+    ; 清空输入框
+    g_eb.clear()
+}
+
 ; 统一的翻译器清理函数（由 Edit_box.hide() 调用）
 cleanup_translator()
 {
-    global g_eb, g_dh, g_is_ime_char, g_is_translating, g_translation_completed
+    global g_eb, g_dh, g_is_ime_char, g_is_translating, g_translation_completed, g_is_info_only
 
     ; 清除输入框内容
     g_eb.clear()
@@ -279,6 +342,7 @@ cleanup_translator()
     g_is_ime_char := false
     g_is_translating := false
     g_translation_completed := false
+    g_is_info_only := false
 
     ; 清除tooltip
     OwnzztooltipEnd()
@@ -407,6 +471,7 @@ main()
     ; 翻译模式控制（默认/实时）
     global g_is_realtime_mode := (g_config.Has("translation_mode") && g_config["translation_mode"] == "realtime")
     global g_translation_completed := false  ; 标记当前翻译是否已完成（默认模式）
+    global g_is_info_only := false  ; 标记当前结果是否为不可发送的信息（如命令状态信息）
 
     ; UI字体配置
     global g_ui_font_family := g_config.Has("ui_font") && g_config["ui_font"].Has("family") ? g_config["ui_font"]["family"] : "Arial"
@@ -1207,7 +1272,7 @@ class Edit_box
 
     on_change(cd ,text)
     {
-        global g_is_translating, g_dh, g_is_realtime_mode, g_translation_completed, g_cancel_translation, g_current_api
+        global g_is_translating, g_dh, g_is_realtime_mode, g_translation_completed, g_cancel_translation, g_current_api, g_is_info_only
 
         ; 翻译完成（成功或失败），清除翻译状态
         g_is_translating := false
@@ -1246,8 +1311,8 @@ class Edit_box
             {
                 tooltip_text := '[' display_name ']: ' text
 
-                ; 默认模式 + 翻译完成：添加[↵]
-                if (!g_is_realtime_mode && g_translation_completed)
+                ; 默认模式 + 翻译完成 + 非信息模式：添加[↵]
+                if (!g_is_realtime_mode && g_translation_completed && !g_is_info_only)
                 {
                     tooltip_text .= '[↵]'
                 }
