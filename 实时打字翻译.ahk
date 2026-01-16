@@ -792,7 +792,7 @@ ON_WM_KEYDOWN(wParam, lParam, msg, hwnd)
     if (hwnd != g_eb.ui.Hwnd)
         return
 
-    ; VK_LEFT = 37, VK_RIGHT = 39, VK_UP = 38, VK_DOWN = 40
+    ; VK_LEFT = 37, VK_RIGHT = 39, VK_UP = 38, VK_DOWN = 40, VK_DELETE = 46
     if (wParam == 37)
     {
         g_eb.left()
@@ -808,6 +808,10 @@ ON_WM_KEYDOWN(wParam, lParam, msg, hwnd)
     else if (wParam == 40)
     {
         g_eb.down()
+    }
+    else if (wParam == 46)  ; VK_DELETE
+    {
+        g_eb.delete()
     }
 }
 
@@ -1534,6 +1538,22 @@ class Edit_box
     {
         if(this.insert_pos > 0)
             this.insert_pos -= 1
+        this.draw(0, false)  ; 只重绘光标位置，不触发翻译
+    }
+    ; 删除光标后的字符（Del键）
+    delete()
+    {
+        local left_txt := SubStr(this.text, 1, StrLen(this.text) - this.insert_pos)
+        local right_txt := SubStr(this.text, -this.insert_pos)
+        ; 如果右边有字符，删除第一个字符
+        if (StrLen(right_txt) > 0)
+        {
+            right_txt := SubStr(right_txt, 2)
+            this.text := left_txt . right_txt
+            ; 调整 insert_pos 以保持光标相对于文本开头的位置
+            if (this.insert_pos > 0)
+                this.insert_pos -= 1
+        }
         this.draw(0, false)  ; 只重绘光标位置，不触发翻译
     }
     up()
