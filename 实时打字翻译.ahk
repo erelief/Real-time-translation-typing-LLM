@@ -315,22 +315,12 @@ main()
 {
     btt('加载中。。。',0, 0,,OwnzztooltipStyle1,{Transparent:180,DistanceBetweenMouseXAndToolTip:-100,DistanceBetweenMouseYAndToolTip:-20})
 
-    ; 自动检测并创建配置文件
+    ; 配置文件路径
     global config_path := A_ScriptDir "\config.json"
-    example_config_path := A_ScriptDir "\config.example.json"
     if !FileExist(config_path)
     {
-        if FileExist(example_config_path)
-        {
-            FileCopy(example_config_path, config_path, 1)
-            btt('已自动创建配置文件：' config_path '`n请编辑填入你的API密钥',0, 0,5000,OwnzztooltipStyle1,{Transparent:180,DistanceBetweenMouseXAndToolTip:-100,DistanceBetweenMouseYAndToolTip:-20})
-            Sleep(1000)
-        }
-        else
-        {
-            MsgBox('错误：找不到配置文件模板 ' example_config_path)
-            ExitApp
-        }
+        MsgBox('错误：找不到配置文件 config.json`n`n请确保你下载了完整的发布包。')
+        ExitApp
     }
 
     ; 加载配置

@@ -50,7 +50,7 @@ jobs:
         if ($mainAhk) { Copy-Item $mainAhk -Destination "dist/" }
 
         # 3. 复制配置和说明
-        Copy-Item "config.example.json" -Destination "dist/"
+        Copy-Item "config.example.json" -Destination "dist/config.json"
         Copy-Item "README.md" -Destination "dist/"
 
         # 4. 创建 lib 目录并复制 .ahk 脚本
