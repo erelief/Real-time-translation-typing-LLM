@@ -364,11 +364,4 @@ A: 需要网络连接。可配置本地服务（如 Ollama）实现较低延迟�
 4. 确认所有启用的模型都有 `max_tokens` 字段
 5. 按 `CTRL F7` 查看当前配置信息
 
-### 问题 4: 找不到 config.json
-**原因**: 首次运行或配置文件被删除
-**解决**:
-- 程序会自动从 `config.example.json` 创建 `config.json`
-- 如果未自行创建，可删除 `config.example.json` 中的 example
-- 重新运行程序即可自动创建
-
 
