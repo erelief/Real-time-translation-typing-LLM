@@ -1200,13 +1200,7 @@ class Edit_box
             logger.err(e.Message)
         }
     }
-    ; 获取显示文本（将空格替换为␣）
-    get_display_text(text := "")
-    {
-        if (text == "")
-            text := this.text
-        return StrReplace(text, " ", "␣")
-    }
+    ; 获取显示文本
 
     ; 显示翻译中提示（默认模式触发翻译时）
     show_translating_tooltip()
@@ -1314,7 +1308,7 @@ class Edit_box
             ; 统一渲染：光标始终存在，直接测量带光标的完整文本
             ; 1. 插入光标字符
             text_with_cursor := this.insert_cursor_char(this.text, this.insert_pos, "▌")
-            display_text := this.get_display_text(text_with_cursor)
+            display_text := text_with_cursor
 
             ; 2. 测量带光标的完整文本尺寸（一次性获取宽度和高度）
             wh := this.ui.GetTextWidthHeight(display_text, g_ui_font_input_size, g_ui_font_family)
@@ -1372,7 +1366,7 @@ class Edit_box
                 ; 统一渲染：光标始终存在，直接测量带光标的完整文本
                 ; 1. 插入光标字符
                 text_with_cursor := this.insert_cursor_char(this.text, this.insert_pos, "▌")
-                display_text := this.get_display_text(text_with_cursor)
+                display_text := text_with_cursor
 
                 ; 2. 测量带光标的完整文本尺寸
                 wh := this.ui.GetTextWidthHeight(display_text, g_ui_font_input_size, g_ui_font_family)
@@ -1422,7 +1416,7 @@ class Edit_box
             ; 统一渲染：光标始终存在，直接测量带光标的完整文本
             ; 1. 插入光标字符
             text_with_cursor := this.insert_cursor_char(this.text, this.insert_pos, "▌")
-            display_text := this.get_display_text(text_with_cursor)
+            display_text := text_with_cursor
 
             ; 2. 测量带光标的完整文本尺寸
             wh := this.ui.GetTextWidthHeight(display_text, g_ui_font_input_size, g_ui_font_family)
@@ -1567,7 +1561,7 @@ class Edit_box
             return
 
         ; 测量总宽度
-        display_text := this.get_display_text()
+        display_text := this.text
         wh := this.ui.GetTextWidthHeight(display_text, g_ui_font_input_size, g_ui_font_family)
 
         ; 判断是否需要多行处理：自动换行 OR 手动回车
@@ -1619,7 +1613,7 @@ class Edit_box
                 continue
             }
 
-            display_char := this.get_display_text(char)
+            display_char := char
             char_wh := this.ui.GetTextWidthHeight(display_char, g_ui_font_input_size, g_ui_font_family)
             char_width := char_wh.width
 
@@ -1707,7 +1701,7 @@ class Edit_box
             return
 
         ; 测量总宽度
-        display_text := this.get_display_text()
+        display_text := this.text
         wh := this.ui.GetTextWidthHeight(display_text, g_ui_font_input_size, g_ui_font_family)
 
         ; 判断是否需要多行处理：自动换行 OR 手动回车
@@ -1759,7 +1753,7 @@ class Edit_box
                 continue
             }
 
-            display_char := this.get_display_text(char)
+            display_char := char
             char_wh := this.ui.GetTextWidthHeight(display_char, g_ui_font_input_size, g_ui_font_family)
             char_width := char_wh.width
 
