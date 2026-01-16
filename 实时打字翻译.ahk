@@ -315,9 +315,7 @@ handle_status_command(*)
     ; 构建配置信息
     api_info := g_config[g_current_api]
     display_name := get_current_service_display_name()
-    status_text := "服务: " display_name " | 模型: " api_info["model"] " | 语言: " g_target_lang " | 模式: " (g_is_realtime_mode ? "实时" : "默认")
-
-    ; 设置状态
+    status_text := "`n模型： " api_info["model"] "`n目标语言： " g_target_lang "`n模式： " (g_is_realtime_mode ? "实时" : "默认")
     g_eb.translation_result := status_text
     g_translation_completed := true
     g_is_info_only := true  ; 标记为信息，不可发送
