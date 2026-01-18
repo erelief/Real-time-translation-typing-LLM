@@ -511,7 +511,6 @@ main()
     HotIf()
     Hotkey('!y', (key) => open_translator()) ;打开翻译器
     Hotkey('^!y', (key) => translate_clipboard()) ;翻译粘贴板文本
-    Hotkey('^f7', (key) => g_eb.debug()) ;调试
     Hotkey('^f8', (key) => switch_translation_mode()) ;切换翻译模式
     Hotkey('!l', (key) => change_target_language()) ;切换目标语言
     Hotkey('~Esc', close_translator) ;退出
@@ -534,7 +533,6 @@ main()
         ENTER (默认模式): 发送翻译请求，再按一次发送
         ENTER (实时模式):直接发送
         CTRL ENTER : 发送原始文本
-        CTRL F7 : 展示当前API配置
         CTRL F8 : 切换默认/实时翻译模式
         TAB : 切换翻译模型
         ESC : 退出
@@ -1230,29 +1228,6 @@ class Edit_box
         return part1 . cursor_char . part2
     }
 
-    debug()
-    {
-        ; 显示当前LLM配置信息
-        global g_config, g_current_api, g_target_lang, g_is_realtime_mode
-        try
-        {
-            api_info := g_config[g_current_api]
-            display_name := get_current_service_display_name()
-            MsgBox(
-                "当前服务: " display_name " (" g_current_api ")`n"
-                "模型: " api_info["model"] "`n"
-                "API地址: " api_info["base_url"] "`n"
-                "目标语言: " g_target_lang "`n"
-                "翻译模式: " (g_is_realtime_mode ? "实时模式" : "默认模式") "`n`n"
-                "按 ALT L 可修改目标语言`n"
-                "按 Ctrl F8 可切换翻译模式"
-            )
-        }
-        catch as e
-        {
-            logger.err(e.Message)
-        }
-    }
     ; 获取显示文本
 
     ; 显示翻译中提示（默认模式触发翻译时）
