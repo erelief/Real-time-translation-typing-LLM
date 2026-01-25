@@ -63,10 +63,14 @@ jobs:
             Write-Host "✅ Copied utility directory"
         }
 
-        # 6. 复制 dll_64 文件夹
-        if (Test-Path "lib\dll_64") {
-            Copy-Item -Path "lib\dll_64" -Destination "dist\lib" -Recurse -Force
-            Write-Host "✅ Copied dll_64 directory"
+        # 6. 复制 64bit 和 32bit DLL 文件夹
+        if (Test-Path "lib\64bit") {
+            Copy-Item -Path "lib\64bit" -Destination "dist\lib" -Recurse -Force
+            Write-Host "✅ Copied 64bit directory"
+        }
+        if (Test-Path "lib\32bit") {
+            Copy-Item -Path "lib\32bit" -Destination "dist\lib" -Recurse -Force
+            Write-Host "✅ Copied 32bit directory"
         }
 
         # 7. 列出最终打包内容以供检查
