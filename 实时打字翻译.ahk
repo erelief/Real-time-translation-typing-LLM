@@ -121,7 +121,7 @@ show_tooltip_and_update_handle(text, x, y)
     ; 唯一排除：拖拽进行中时不检测（避免闪烁）
     if (!g_dh.is_dragging)
     {
-        original_x := x + handle_width
+        original_x := x
         original_y := y
         x_adjusted := Abs(tooltip_info.X - original_x) > 5
         y_adjusted := Abs(tooltip_info.Y - original_y) > 5
@@ -165,12 +165,19 @@ show_tooltip_and_update_handle(text, x, y)
     ; 只有当位置真正改变时才移动手柄
     if (current_handle_x != new_handle_x)
     {
-        g_dh.ui.gui.Move(new_handle_x, current_handle_y)
+        g_dh.move(new_handle_x, current_handle_y)
     }
 
     ; 同时更新输入框位置：在tooltip下方，左对齐tooltip
     ; 输入框X = tooltip.X，输入框Y = tooltip.Y + tooltip实际高度（考虑换行后的高度）
-    g_eb.move(tooltip_info.X, tooltip_info.Y + tooltip_info.H)
+    ; 获取输入框当前位置，只在位置改变时才移动（避免跳动）
+    g_eb.ui.gui.GetPos(&eb_x, &eb_y, &eb_w, &eb_h)
+    new_eb_x := tooltip_info.X
+    new_eb_y := tooltip_info.Y + tooltip_info.H
+    if (eb_x != new_eb_x || eb_y != new_eb_y)
+    {
+        g_eb.move(new_eb_x, new_eb_y)
+    }
 
     return tooltip_info
 }
