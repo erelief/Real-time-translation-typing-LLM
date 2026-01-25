@@ -229,10 +229,15 @@ handle_enter_key(*)
             handle_status_command()
             return
         }
+        else if (SubStr(input_text, 1, 6) == "/lang ")
+        {
+            handle_lang_command()
+            return
+        }
         else
         {
             ; 未知命令提示
-            btt("未知命令: " input_text "`n目前只支持 /status", 0, 0,, OwnzztooltipStyle1, {Transparent:180, DistanceBetweenMouseXAndToolTip:-100, DistanceBetweenMouseYAndToolTip:-20})
+            btt("未知命令: " input_text "`n目前只支持 /status 和 /lang", 0, 0,, OwnzztooltipStyle1, {Transparent:180, DistanceBetweenMouseXAndToolTip:-100, DistanceBetweenMouseYAndToolTip:-20})
             SetTimer(() => OwnzztooltipEnd(), -3000)
             g_eb.hide()
             return
@@ -325,6 +330,96 @@ handle_status_command(*)
 
     ; 清空输入框
     g_eb.clear()
+}
+
+; 开始翻译语言名称（通过 LLM 异步回调）
+translate_lang_name(user_lang_input)
+{
+    global g_current_api, g_translators
+
+    ; 构建完整的 prompt（英文，避免 LLM 翻译指令）
+    prompt := "Translate the following language name into standard English language code (e.g. Japanese, French, Korean). Only output the translation result without any explanation.`n`nLanguage name: " user_lang_input
+
+    ; 创建临时回调来处理语言名称翻译完成
+    lang_name_callback := (translator_name, translated_lang) => (
+        on_lang_name_translation_completed(translated_lang)
+    )
+
+    ; 设置临时回调
+    g_translators[g_current_api].set_callback(lang_name_callback)
+
+    ; 发送原始 prompt（不经过 build_prompt 包装）
+    g_translators[g_current_api].send_raw_prompt(prompt)
+}
+
+; 语言名称翻译完成回调
+on_lang_name_translation_completed(translated_lang)
+{
+    global g_eb, g_config, g_current_api, g_target_lang, g_translation_completed, g_is_info_only, g_is_translating
+
+    ; 翻译完成，清除翻译状态
+    g_is_translating := false
+
+    if (translated_lang != "")
+    {
+        ; 保存翻译后的标准语言名
+        g_target_lang := translated_lang
+        g_config["target_lang"] := translated_lang
+
+        ; 保存到配置文件
+        saveconfig(g_config, A_ScriptDir "\config.json")
+
+        ; 显示切换成功信息
+        result_text := "目标语言已切换到: " g_target_lang
+        g_eb.translation_result := result_text
+        g_translation_completed := true
+        g_is_info_only := true  ; 标记为信息，不可发送
+
+        ; 完全复用翻译流程显示结果（自动显示 [↵]）
+        g_eb.on_change(g_current_api, result_text)
+
+        ; 清空输入框
+        g_eb.clear()
+
+        logger.info('目标语言已切换到: ' g_target_lang)
+    }
+    else
+    {
+        ; 翻译失败提示
+        btt("语言翻译失败，请重试", 0, 0,, OwnzztooltipStyle1, {Transparent:180, DistanceBetweenMouseXAndToolTip:-100, DistanceBetweenMouseYAndToolTip:-20})
+        SetTimer(() => OwnzztooltipEnd(), -3000)
+        g_eb.clear()
+    }
+
+    ; 恢复原始回调
+    g_translators[g_current_api].set_callback(ObjBindMethod(g_eb, "on_change"))
+}
+
+; 处理 /lang 命令
+handle_lang_command(*)
+{
+    global g_eb, g_config, g_current_api, g_target_lang, g_translation_completed, g_is_info_only, g_is_translating
+
+    ; 解析语言参数
+    input_text := g_eb.text
+    new_lang := Trim(SubStr(input_text, 7))
+
+    if (new_lang == "")
+    {
+        btt("请指定目标语言`n用法: /lang 目标语言", 0, 0,, OwnzztooltipStyle1, {Transparent:180, DistanceBetweenMouseXAndToolTip:-100, DistanceBetweenMouseYAndToolTip:-20})
+        SetTimer(() => OwnzztooltipEnd(), -3000)
+        g_eb.clear()
+        return
+    }
+
+    ; 标记正在翻译（阻止按回车）
+    g_is_translating := true
+
+    ; 重置翻译完成状态
+    g_translation_completed := false
+
+    ; 开始翻译语言名称（异步）
+    translate_lang_name(new_lang)
 }
 
 ; 统一的翻译器清理函数（由 Edit_box.hide() 调用）
@@ -512,7 +607,6 @@ main()
     Hotkey('!y', (key) => open_translator()) ;打开翻译器
     Hotkey('^!y', (key) => translate_clipboard()) ;翻译粘贴板文本
     Hotkey('^f8', (key) => switch_translation_mode()) ;切换翻译模式
-    Hotkey('!l', (key) => change_target_language()) ;切换目标语言
     Hotkey('~Esc', close_translator) ;退出
     Hotkey('~LButton', on_global_mouse_click) ;全局鼠标点击检测（用于失焦退出）
 	HotIfWinExist("ahk_id " g_eb.ui.hwnd)
@@ -529,7 +623,6 @@ main()
     (
         欢迎使用实时打字翻译工具
         ALT Y : 打开翻译器
-        ALT L : 修改目标语言
         ENTER (默认模式): 发送翻译请求，再按一次发送
         ENTER (实时模式):直接发送
         CTRL ENTER : 发送原始文本
@@ -548,29 +641,6 @@ translate_clipboard(*)
     open_translator()
     g_eb.text := A_Clipboard
     g_eb.draw()
-}
-
-change_target_language(*)
-{
-    global g_target_lang, g_config
-
-    ; 弹出输入框让用户输入新语言
-    ib := InputBox('当前目标语言: ' g_target_lang, '设置目标语言', , 'English')
-
-    if (ib.Result == "OK")
-    {
-        new_lang := ib.Value
-        if (new_lang != "")
-        {
-            g_target_lang := new_lang
-            g_config["target_lang"] := new_lang
-
-            ; 保存到配置文件
-            saveconfig(g_config, A_ScriptDir "\config.json")
-
-            logger.info('目标语言已切换到: ' g_target_lang)
-        }
-    }
 }
 
 
@@ -977,7 +1047,8 @@ ON_WM_EXITSIZEMOVE(wParam, lParam, msg, hwnd)
     }
 
     ; 激活翻译输入框，确保拖动后焦点回到输入框
-    WinActivate("ahk_id " g_eb.ui.gui.Hwnd)
+    if (WinExist("ahk_id " g_eb.ui.gui.Hwnd))
+        WinActivate("ahk_id " g_eb.ui.gui.Hwnd)
 
     ; 记录调试信息（使用控件类名标识）
     local class_name := ""  ; 声明局部变量，避免 #Warn 警告
@@ -1266,7 +1337,7 @@ class Edit_box
 
         ; logger.info(cd ,text)  ; 性能优化：移除频繁日志
         ; logger.info()  ; 性能优化：移除空日志调用
-        if(this.show_status && cd = g_current_api)
+        if(this.show_status && cd = g_current_api && g_dh.show_status)
         {
             this.translation_result := text
 
