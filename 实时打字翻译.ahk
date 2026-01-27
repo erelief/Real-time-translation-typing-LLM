@@ -1547,12 +1547,23 @@ class Edit_box
             ; 只在输入为空时显示服务名 Tooltip（避免频繁更新）
             if (this.text = "")
             {
-                this.translation_result := ""
+                ; 不要清空 translation_result，保留命令执行的结果
+                ; this.translation_result := ""  ; 注释掉，避免清空命令结果
+
                 ; 获取手柄位置（tooltip在手柄右侧，同一行）
                 pos := g_dh.get_gui_pos()
                 handle_width := 30
                 display_name := get_service_display_with_status()
-                btt('[' display_name ']', Integer(pos.x + handle_width), Integer(pos.y),,OwnzztooltipStyle1,{Transparent:180,DistanceBetweenMouseXAndToolTip:-100,DistanceBetweenMouseYAndToolTip:-20})
+
+                ; 如果有翻译结果，显示结果；否则只显示服务名
+                if (this.translation_result != "")
+                {
+                    show_tooltip_and_update_handle('[' display_name ']: ' this.translation_result, Integer(pos.x + handle_width), Integer(pos.y))
+                }
+                else
+                {
+                    show_tooltip_and_update_handle('[' display_name ']', Integer(pos.x + handle_width), Integer(pos.y))
+                }
             }
 
             ; 统一渲染：光标始终存在，直接测量带光标的完整文本
@@ -1641,6 +1652,7 @@ class Edit_box
     {
         this.text := ''
         this.insert_pos := 0
+        this.draw(0, false)  ; 触发更新机制，重新定位输入框
     }
     push(char)
     {
