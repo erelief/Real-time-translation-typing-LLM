@@ -236,6 +236,11 @@ handle_enter_key(*)
             handle_status_command()
             return
         }
+        else if (input_text == "/help")
+        {
+            handle_help_command()
+            return
+        }
         else if (SubStr(input_text, 1, 6) == "/lang ")
         {
             handle_lang_command()
@@ -243,10 +248,17 @@ handle_enter_key(*)
         }
         else
         {
-            ; 未知命令提示
-            btt("未知命令: " input_text "`n目前只支持 /status 和 /lang", 0, 0,, OwnzztooltipStyle1, {Transparent:180, DistanceBetweenMouseXAndToolTip:-100, DistanceBetweenMouseYAndToolTip:-20})
-            SetTimer(() => OwnzztooltipEnd(), -3000)
-            g_eb.hide()
+            ; 未知命令：显示错误信息（与 /status 命令处理方式一致）
+            error_text := "`n未知命令: " input_text "`n使用 /help 查看可用命令"
+            g_eb.translation_result := error_text
+            g_translation_completed := true
+            g_is_info_only := true  ; 标记为信息，不可发送
+
+            ; 显示错误信息在翻译结果区域
+            g_eb.on_change(g_current_api, error_text)
+
+            ; 清空输入框
+            g_eb.clear()
             return
         }
     }
@@ -334,6 +346,29 @@ handle_status_command(*)
 
     ; 直接调用 on_change 显示结果（完全复用翻译流程）
     g_eb.on_change(g_current_api, status_text)
+
+    ; 清空输入框
+    g_eb.clear()
+}
+
+; 处理 /help 命令
+handle_help_command(*)
+{
+    global g_eb, g_translation_completed, g_is_info_only, g_current_api
+
+    ; 构建帮助文本
+    help_text := "`n可用命令："
+    help_text .= "`n/status - 显示当前配置状态"
+    help_text .= "`n/lang <语言名称> - 切换目标翻译语言"
+    help_text .= "`n/help - 显示此帮助信息"
+
+    ; 设置为信息结果
+    g_eb.translation_result := help_text
+    g_translation_completed := true
+    g_is_info_only := true  ; 标记为信息，不可发送
+
+    ; 直接调用 on_change 显示结果（完全复用翻译流程）
+    g_eb.on_change(g_current_api, help_text)
 
     ; 清空输入框
     g_eb.clear()
@@ -636,6 +671,7 @@ main()
         CTRL F8 : 切换默认/实时翻译模式
         TAB : 切换翻译模型
         ESC : 退出
+        /help : 显示可用命令
     )'
     btt(help_text, 0, 0, , OwnzztooltipStyle1, {Transparent:180, DistanceBetweenMouseXAndToolTip:-100, DistanceBetweenMouseYAndToolTip:-20})
 
