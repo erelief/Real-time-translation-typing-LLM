@@ -134,7 +134,7 @@ class OpenAI_Compat_LLM
         prompt := "Translate the following text to " . target_lang . ". Only output the translated result without any explanation.`n`n"
         prompt .= "Punctuation Rule: Match the source text's ending punctuation style:`n"
         prompt .= "- If source ends with punctuation (。.！!？?，,、), add corresponding punctuation in " . target_lang . "`n"
-        prompt .= "- If source has NO ending punctuation, do NOT add any punctuation`n`n"
+        prompt .= "- If source has NO ending punctuation, do NOT add any punctuation and do NOT capitalize the first letter`n`n"
         prompt .= "Source text:`n" . text
         return prompt
     }
