@@ -17,7 +17,7 @@ class OpenAI_Compat_LLM
     }
 
     ; 翻译文本
-    translate(text, target_lang := "en")
+    translate(text, target_lang := "en", persona := "")
     {
         try
         {
@@ -27,7 +27,7 @@ class OpenAI_Compat_LLM
                 url := RTrim(url, "/") "/chat/completions"
 
             ; 构建提示词
-            prompt := this.build_prompt(text, target_lang)
+            prompt := this.build_prompt(text, target_lang, persona)
 
             ; 构建请求头
             headers := Map(
@@ -129,8 +129,15 @@ class OpenAI_Compat_LLM
     }
 
     ; 构建翻译提示词
-    build_prompt(text, target_lang)
+    build_prompt(text, target_lang, persona := "")
     {
+        ; 如果有个性提示词，添加到翻译指令前面
+        prompt := ""
+        if (persona != "")
+        {
+            prompt .= persona . ". "
+        }
+
         prompt := "Translate the following text to " . target_lang . ". Only output the translated result without any explanation.`n`n"
         prompt .= "Punctuation Rule: Match the source text's ending punctuation style:`n"
         prompt .= "- If source ends with punctuation (。.！!？?，,、), add corresponding punctuation in " . target_lang . "`n"

@@ -2,6 +2,7 @@
     "translation_mode": "manual",
     "cd": "Model1",
     "target_lang": "English",
+    "persona": "",
     "ui_font": {
         "family": "Segoe UI",
         "tooltip_size": 16, 

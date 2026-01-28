@@ -246,6 +246,18 @@ handle_enter_key(*)
             handle_lang_command()
             return
         }
+        else if (input_text == "/persona")
+        {
+            ; /persona 不带参数：清除个性
+            handle_persona_command()
+            return
+        }
+        else if (SubStr(input_text, 1, 9) == "/persona ")
+        {
+            ; /persona <描述>：设置个性
+            handle_persona_command()
+            return
+        }
         else
         {
             ; 未知命令：显示错误信息（与 /status 命令处理方式一致）
@@ -334,12 +346,16 @@ switch_translation_mode(*)
 ; 处理 /status 命令
 handle_status_command(*)
 {
-    global g_eb, g_config, g_current_api, g_target_lang, g_is_realtime_mode, g_translation_completed, g_is_info_only
+    global g_eb, g_config, g_current_api, g_target_lang, g_is_realtime_mode, g_translation_completed, g_is_info_only, g_persona
 
     ; 构建配置信息
     api_info := g_config[g_current_api]
     display_name := get_current_service_display_name()
     status_text := "`n模型： " api_info["model"] "`n目标语言： " g_target_lang "`n模式： " (g_is_realtime_mode ? "实时" : "默认")
+
+    ; 总是显示个性（有个性时显示内容，无个性时显示"无"）
+    status_text .= "`n个性： " (g_persona != "" ? g_persona : "无")
+
     g_eb.translation_result := status_text
     g_translation_completed := true
     g_is_info_only := true  ; 标记为信息，不可发送
@@ -360,6 +376,8 @@ handle_help_command(*)
     help_text := "`n可用命令："
     help_text .= "`n/status - 显示当前配置状态"
     help_text .= "`n/lang <语言名称> - 切换目标翻译语言"
+    help_text .= "`n/persona <描述> - 设置翻译风格个性（例：/persona 影视专业）"
+    help_text .= "`n/persona - 清除翻译风格个性"
     help_text .= "`n/help - 显示此帮助信息"
 
     ; 设置为信息结果
@@ -389,6 +407,26 @@ translate_lang_name(user_lang_input)
 
     ; 设置临时回调
     g_translators[g_current_api].set_callback(lang_name_callback)
+
+    ; 发送原始 prompt（不经过 build_prompt 包装）
+    g_translators[g_current_api].send_raw_prompt(prompt)
+}
+
+; 推导性格描述（通过 LLM 异步回调）
+derive_persona_description(user_input)
+{
+    global g_current_api, g_translators
+
+    ; 构建完整的 prompt
+    prompt := "Based on the user's description, derive a concise persona prefix for translation style (maximum 20 Chinese characters). Only output the derived description without any explanation.`n`nUser description: " user_input
+
+    ; 创建临时回调来处理推导结果
+    persona_callback := (translator_name, derived_persona) => (
+        on_persona_derivation_completed(derived_persona)
+    )
+
+    ; 设置临时回调
+    g_translators[g_current_api].set_callback(persona_callback)
 
     ; 发送原始 prompt（不经过 build_prompt 包装）
     g_translators[g_current_api].send_raw_prompt(prompt)
@@ -437,6 +475,56 @@ on_lang_name_translation_completed(translated_lang)
     g_translators[g_current_api].set_callback(ObjBindMethod(g_eb, "on_change"))
 }
 
+; 性格描述推导完成回调
+on_persona_derivation_completed(derived_persona)
+{
+    global g_eb, g_config, g_current_api, g_persona, g_translation_completed, g_is_info_only, g_is_translating
+
+    ; 推导完成，清除翻译状态
+    g_is_translating := false
+
+    if (derived_persona != "")
+    {
+        ; 截断到 20 字（防止 LLM 返回超长描述）
+        if (StrLen(derived_persona) > 20)
+        {
+            derived_persona := SubStr(derived_persona, 1, 20)
+            logger.info("LLM 返回的个性描述过长，已截断到20字")
+        }
+
+        ; 保存推导后的性格描述
+        g_persona := derived_persona
+        g_config["persona"] := derived_persona
+
+        ; 保存到配置文件
+        saveconfig(g_config, A_ScriptDir "\config.json")
+
+        ; 显示设置成功信息
+        result_text := "个性提示词已设置: " g_persona
+        g_eb.translation_result := result_text
+        g_translation_completed := true
+        g_is_info_only := true
+
+        ; 完全复用翻译流程显示结果
+        g_eb.on_change(g_current_api, result_text)
+
+        ; 清空输入框
+        g_eb.clear()
+
+        logger.info('个性提示词已设置: ' g_persona)
+    }
+    else
+    {
+        ; 推导失败提示
+        btt("个性设置失败，请重试", 0, 0,, OwnzztooltipStyle1, {Transparent:180, DistanceBetweenMouseXAndToolTip:-100, DistanceBetweenMouseYAndToolTip:-20})
+        SetTimer(() => OwnzztooltipEnd(), -3000)
+        g_eb.clear()
+    }
+
+    ; 恢复原始回调
+    g_translators[g_current_api].set_callback(ObjBindMethod(g_eb, "on_change"))
+}
+
 ; 处理 /lang 命令
 handle_lang_command(*)
 {
@@ -462,6 +550,60 @@ handle_lang_command(*)
 
     ; 开始翻译语言名称（异步）
     translate_lang_name(new_lang)
+}
+
+; 处理 /persona 命令
+handle_persona_command(*)
+{
+    global g_eb, g_config, g_current_api, g_persona, g_translation_completed, g_is_info_only, g_is_translating
+
+    ; 解析参数
+    input_text := g_eb.text
+    persona_desc := Trim(SubStr(input_text, 10))
+
+    ; 判断是设置还是清除
+    if (persona_desc == "")
+    {
+        ; 清除个性：直接执行，不需要 LLM
+        clear_persona()
+    }
+    else
+    {
+        ; 设置个性：通过 LLM 推导性格描述
+        ; 标记正在翻译（阻止按回车）
+        g_is_translating := true
+        g_translation_completed := false
+
+        ; 开始推导性格描述（异步）
+        derive_persona_description(persona_desc)
+    }
+}
+
+; 清除个性提示词（同步操作，不需要 LLM）
+clear_persona()
+{
+    global g_eb, g_config, g_current_api, g_persona, g_translation_completed, g_is_info_only
+
+    ; 清除个性
+    g_persona := ""
+    g_config["persona"] := ""
+
+    ; 保存到配置文件
+    saveconfig(g_config, A_ScriptDir "\config.json")
+
+    ; 显示清除成功信息
+    result_text := "个性提示词已清除"
+    g_eb.translation_result := result_text
+    g_translation_completed := true
+    g_is_info_only := true
+
+    ; 完全复用翻译流程显示结果
+    g_eb.on_change(g_current_api, result_text)
+
+    ; 清空输入框
+    g_eb.clear()
+
+    logger.info('个性提示词已清除')
 }
 
 ; 统一的翻译器清理函数（由 Edit_box.hide() 调用）
@@ -574,6 +716,7 @@ main()
     }
 
     global g_target_lang := g_config.Has("target_lang") ? g_config["target_lang"] : "en"
+    global g_persona := g_config.Has("persona") ? g_config["persona"] : ""
     global g_translators := Map()  ; 存储所有LLM实例
 
     ; 初始化所有启用的LLM翻译器
@@ -1645,7 +1788,7 @@ class Edit_box
 
             ; 设置回调为当前实例
             g_translators[g_current_api].set_callback(this.on_change.bind(this))
-            g_translators[g_current_api].translate(input_text, g_target_lang)
+            g_translators[g_current_api].translate(input_text, g_target_lang, g_persona)
         }
     }
     clear()
