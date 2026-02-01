@@ -57,11 +57,8 @@ jobs:
         New-Item -ItemType Directory -Force -Path "dist\lib"
         Copy-Item -Path "lib\*.ahk" -Destination "dist\lib\" -Force
 
-        # 5. 复制 utility 文件夹（LOL 相关功能依赖）
-        if (Test-Path "utility") {
-            Copy-Item -Path "utility" -Destination "dist\" -Recurse -Force
-            Write-Host "✅ Copied utility directory"
-        }
+        # 5. utility 文件夹已删除（LOL 功能已归档）
+        # 不再复制 utility 文件夹
 
         # 6. 复制 64bit 和 32bit DLL 文件夹
         if (Test-Path "lib\64bit") {
