@@ -1,12 +1,10 @@
 #Requires AutoHotkey v2.0
 #include <Direct2DRender>
-#include <zmq>
 #include <log>
 #include <ComVar>
 #include <btt>
 #include <WinHttpRequest>
 #include <LLM_Translator>
-#include ./utility/lol_game.ah2
 
 logger.is_log_open := false  ; 关闭日志
 logger.is_use_editor := true
@@ -736,8 +734,6 @@ main()
     global g_cursor_x := 0
     global g_cursor_y := 0
     global g_window_hwnd := 0
-    global g_is_input_mode := true
-    global g_lol_api := Lcu()
 
     ; 位置记忆相关变量（会话级，按控件句柄）
     global g_manual_positions := Map()
@@ -769,26 +765,9 @@ main()
     ; 输入框宽度限制（测试800px）
     global MAX_INPUT_WIDTH := 800
 
-    zmq_version(&a := 0, &b := 0, &c := 0)
-    logger.info("版本: ", a, b, c)
-    ctx := zmq_ctx_new()
-    global g_requester := zmq_socket(ctx, ZMQ_REQ)
-    ;设置超时时间 -1无限等待, 0立即返回
-    buf := Buffer(4), NumPut("int", 1000, buf)
-    zmq_setsockopt(g_requester, ZMQ_RCVTIMEO, buf, buf.Size)
-    rtn := zmq_connect(g_requester, "tcp://localhost:5555")
-
     g_eb.hide()
     g_dh.hide()
 
-	HotIfWinExist("ahk_class RiotWindowClass")
-        Hotkey('XButton1', (key) => open_translator()) ;打开翻译器
-        Hotkey('XButton2', (key) => send_command('Primitive')) ;打开翻译器
-        Hotkey('!XButton2', (key) => (g_eb.text := '/all ' g_eb.text, send_command('Primitive'))) ;打开翻译器
-        Hotkey('^XButton2', (key) => (g_eb.text := '/all ' g_eb.text, g_eb.translation_result := '/all ' g_eb.translation_result, send_command(''))) ;打开翻译器
-        Hotkey('+XButton2', (key) => send_command('')) ;打开翻译器
-        Hotkey('!f8', (key) => switch_lol_send_mode())
-    HotIf()
     Hotkey('!y', (key) => open_translator()) ;打开翻译器
     Hotkey('^!y', (key) => translate_clipboard()) ;翻译粘贴板文本
     Hotkey('^f8', (key) => switch_translation_mode()) ;切换翻译模式
@@ -876,12 +855,6 @@ paste(*)
     g_eb.draw()
 }
 
-switch_lol_send_mode(p*)
-{
-    global g_is_input_mode
-    g_is_input_mode := !g_is_input_mode
-}
-
 send_command(p*)
 {
     global g_window_hwnd, g_dh, g_is_translating
@@ -889,7 +862,6 @@ send_command(p*)
     ; 如果正在翻译中，直接返回（不发送）
     if (g_is_translating)
         return
-    static before_txt := g_eb.text
     try
     {
         data := g_eb.text
@@ -910,35 +882,8 @@ send_command(p*)
             }
         }
 
-        if(WinActive('ahk_class RiotWindowClass'))
-        {
-            if(g_is_input_mode)
-            {
-                if(data == '' || data == '/all ')
-                    SendCn(data before_txt)
-                else
-                {
-                    SendCn(data)
-                    before_txt := data
-                }
-            }
-            else
-            {
-
-                if(data == '' || data == '/all ')
-                    sendcmd2game(data before_txt)
-                else
-                {
-                    sendcmd2game(data)
-                    before_txt := data
-                }
-            }
-        }
-        else
-        {
-            SendInput('{RShift Down}{Insert}{RShift Up}')
-            sleep(200)
-        }
+        SendInput('{RShift Down}{Insert}{RShift Up}')
+        sleep(200)
         A_Clipboard := old
     }
     catch as e
@@ -2367,37 +2312,4 @@ EncodeDecodeURI(str, encode := true, component := true) {
         ( Doc.documentMode < 9 && JS.execScript() )
     }
     Return JS.%( (encode ? "en" : "de") . "codeURI" . (component ? "Component" : "") )%(str)
-}
-
-sendcmd2game(str)
-{
-    logger.info("sendcn")
-    g_lol_api.get_hero_name_and_id(&name, &id)
-	;<font color="#40C1FF">[队伍] 玩家名 (英雄名): </font><font color="#FFFFFF">喊话内容</font>
-    if(InStr(str, '/all '))
-    {
-        str := LTrim(str, '/all ')
-        zmq_send_string(g_requester,'<font color="#ff0000">[所有人] ' id  '(' name '): </font><font color="#FFFFFF">' str '</font>')
-    }
-    else
-    {
-        zmq_send_string(g_requester,'<font color="#40C1FF">[队伍] ' id  '(' name '): </font><font color="#FFFFFF">' str '</font>')
-    }
-
-    rtn := zmq_recv_string(g_requester, &recv_string := '')
-    logger.info("sendcn ok")
-}
-
-SendCn(str)
-{
-    SendInput("{Enter}")
-    Sleep(200)
-    charList:=StrSplit(str)
-    for key,val in charList{
-        ; 转换每个字符为{U+16进制Unicode编码}
-        out.="{U+" . Format("{:X}",ord(val)) . "}"
-    }
-    SendInput(out)
-    Sleep(400)
-    SendInput("{Enter}")
 }
