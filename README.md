@@ -15,9 +15,8 @@
 ## 项目说明
 - 本项目 fork 自 [sxzxs/Real-time Translation Typing](https://github.com/sxzxs/Real-time-translation-typing)，只是将项目改成了由大语言模型驱动的版本，主要功能归功于于原开发者
 - 所有的更改通过在 Claude Code 中配置了 GLM-4.7 后 Vibe Coding 而成，我自己不会编程
-- 所有的 LOL 功能原项目本身存在，我自己不玩所以***无法确认效果***
 - 绝大部分技术说明也由 AI 直接生成，请仔细甄别
-- 请注意隐私，如有需求请自行配置本地大模型
+- 请注意隐私，如有需求请自行配置本地大语言模型（LLM）
 
 查看详细的版本更新历史，请参阅 [CHANGELOG.md](CHANGELOG.md)
 
