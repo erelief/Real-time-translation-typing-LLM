@@ -53,6 +53,9 @@ jobs:
         Copy-Item "config.example.json" -Destination "dist/config.json"
         Copy-Item "README.md" -Destination "dist/"
 
+        # 3.5. 创建用户字典文件
+        Copy-Item "dictionary.md.template" -Destination "dist/dictionary.md"
+
         # 4. 创建 lib 目录并复制 .ahk 脚本
         New-Item -ItemType Directory -Force -Path "dist\lib"
         Copy-Item -Path "lib\*.ahk" -Destination "dist\lib\" -Force

@@ -128,6 +128,106 @@ class OpenAI_Compat_LLM
         }
     }
 
+    ; 读取用户字典文件，返回指定目标语言的词条
+    get_user_dictionary_content(target_lang)
+    {
+        local dict_file := A_ScriptDir "\dictionary.md"
+
+        ; 检查文件是否存在
+        if !FileExist(dict_file)
+        {
+            ; 文件不存在，返回空字符串（不报错）
+            return ""
+        }
+
+        ; 读取文件
+        local file_lines := []
+        local line_count := 0
+        local entries := []
+
+        try
+        {
+            file_lines := StrSplit(FileRead(dict_file, "UTF-8"), "`n")
+        }
+        catch as e
+        {
+            logger.err("读取字典文件失败: " e.Message)
+            return ""
+        }
+
+        ; 查找目标语言对应的词条（渐进式披露）
+        local in_target_section := false
+
+        for line in file_lines
+        {
+            ; 跳过空行
+            line := Trim(line)
+            if (line = "")
+                continue
+
+            ; 检查是否为一级标题（# Language）
+            if (SubStr(line, 1, 1) = "#")
+            {
+                ; 检查是否为一级标题（只有一个 #）
+                local second_char := SubStr(line, 2, 1)
+                if (second_char = " " || second_char = "")
+                {
+                    ; 这是一级标题
+                    local section_lang := Trim(SubStr(line, 2))
+                    if (section_lang = target_lang)
+                    {
+                        ; 找到目标语言标题，开始记录词条
+                        in_target_section := true
+                    }
+                    else if (in_target_section)
+                    {
+                        ; 已经在目标语言段落中，遇到其他一级标题则停止
+                        break
+                    }
+                    continue
+                }
+                ; 否则是二级标题（##），在目标段落中继续处理
+            }
+
+            ; 如果在目标语言段落中，解析词条
+            if (in_target_section)
+            {
+                ; 跳过二级标题（## 分类）
+                if (SubStr(line, 1, 2) = "##")
+                    continue
+
+                ; 解析格式：原文 translation（用空格或 Tab 分隔）
+                ; 找到第一个空格或 Tab
+                local separator_pos := RegExMatch(line, "[ 	]", &match)
+                if (separator_pos > 0)
+                {
+                    local source_text := Trim(SubStr(line, 1, separator_pos))
+                    local translation := Trim(SubStr(line, separator_pos + 1))
+
+                    ; 确保译文不为空
+                    if (translation != "")
+                    {
+                        entries.Push(source_text " → " translation)
+                        line_count++
+                    }
+                }
+            }
+        }
+
+        ; 如果没有有效词条，返回空字符串
+        if (line_count = 0)
+            return ""
+
+        ; 格式化为字符串
+        local dict_content := "用户自定义词典（" target_lang "）：`n"
+        for entry in entries
+        {
+            dict_content .= "  - " entry "`n"
+        }
+
+        return dict_content
+    }
+
     ; 构建翻译提示词
     build_prompt(text, target_lang, persona := "")
     {
@@ -136,6 +236,14 @@ class OpenAI_Compat_LLM
         if (persona != "")
         {
             prompt .= persona . ". "
+        }
+
+        ; 附加用户字典内容（渐进式披露）
+        local dict_content := this.get_user_dictionary_content(target_lang)
+        if (dict_content != "")
+        {
+            prompt .= dict_content "`n"
+            prompt .= "请优先参考上述词典进行翻译。如果词典中有匹配的词条，请使用词典中的翻译。`n`n"
         }
 
         prompt := "Translate the following text to " . target_lang . ". Only output the translated result without any explanation.`n`n"
