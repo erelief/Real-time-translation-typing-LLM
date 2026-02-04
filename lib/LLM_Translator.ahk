@@ -123,119 +123,6 @@ class OpenAI_Compat_LLM
         }
     }
 
-    ; 读取用户字典文件，返回指定目标语言的词条
-    get_user_dictionary_content(target_lang)
-    {
-        local dict_file := A_ScriptDir "\dictionary.md"
-
-        ; 检查文件是否存在
-        if !FileExist(dict_file)
-            return ""
-
-        ; 读取文件
-        local file_lines := []
-        local line_count := 0
-        local entries := []
-
-        try
-        {
-            file_lines := StrSplit(FileRead(dict_file, "UTF-8"), "`n")
-        }
-        catch as e
-        {
-            return ""
-        }
-
-        ; 查找目标语言对应的词条
-        local in_target_section := false
-        local in_frontmatter := false
-
-        for line in file_lines
-        {
-            ; 跳过空行
-            line := Trim(line)
-            if (line = "")
-                continue
-
-            ; 处理 YAML frontmatter
-            if (SubStr(line, 1, 3) = "---")
-            {
-                in_frontmatter := !in_frontmatter
-                continue
-            }
-
-            ; 如果在 frontmatter 中，跳过该行
-            if (in_frontmatter)
-                continue
-
-            ; 检查是否为一级标题
-            if (SubStr(line, 1, 1) = "#")
-            {
-                ; 检查是否为一级标题（只有一个 #）
-                local second_char := SubStr(line, 2, 1)
-                if (second_char = " " || second_char = "")
-                {
-                    ; 这是一级标题 - 修复：显式移除换行符
-                    local section_lang := SubStr(line, 2)
-                    section_lang := StrReplace(section_lang, "`n", "")
-                    section_lang := StrReplace(section_lang, "`r", "")
-                    section_lang := Trim(section_lang)
-                    local normalized_target := Trim(target_lang)
-                    normalized_target := StrReplace(normalized_target, "`n", "")
-                    normalized_target := StrReplace(normalized_target, "`r", "")
-
-                    if (section_lang = normalized_target)
-                    {
-                        in_target_section := true
-                    }
-                    else if (in_target_section)
-                    {
-                        break
-                    }
-                    continue
-                }
-            }
-
-            ; 如果在目标语言段落中，解析词条
-            if (in_target_section)
-            {
-                ; 跳过二级标题（## 分类）
-                if (SubStr(line, 1, 2) = "##")
-                    continue
-
-                ; 解析格式：原文 translation（用空格或 Tab 分隔）
-                ; 找到第一个空格或 Tab
-                local separator_pos := RegExMatch(line, "[ 	]", &match)
-                if (separator_pos > 0)
-                {
-                    local source_text := Trim(SubStr(line, 1, separator_pos))
-                    local translation := Trim(SubStr(line, separator_pos + 1))
-
-                    ; 确保译文不为空
-                    if (translation != "")
-                    {
-                        entries.Push(source_text " → " translation)
-                        line_count++
-                    }
-                }
-            }
-        }
-
-        ; 如果没有有效词条，返回空字符串
-        if (line_count = 0)
-            return ""
-
-        ; 格式化为字符串时，添加明确的处理指令（纯英文）
-        local dict_content := "**User Dictionary:** When translating, if you find the following terms in the source text, replace them with their translations first:`n`n"
-        for entry in entries
-        {
-            dict_content .= "  - " entry "`n"
-        }
-        dict_content .= "`nAfter replacing terms, translate the text.`n`n"
-
-        return dict_content
-    }
-
     ; 构建翻译提示词
     build_prompt(text, target_lang, persona := "")
     {
@@ -254,11 +141,27 @@ class OpenAI_Compat_LLM
         prompt .= "- If source ends with punctuation (。.！!？?，,、), add corresponding punctuation in " . target_lang . "`n"
         prompt .= "- If source has NO ending punctuation, do NOT add any punctuation and do NOT capitalize the first letter`n`n"
 
-        ; 附加用户字典内容（渐进式披露）- 紧邻源文本前
-        local dict_content := this.get_user_dictionary_content(target_lang)
-        if (dict_content != "")
+        ; 附加用户词典（直接读取整个文件，让 LLM 理解结构）
+        local dict_file := A_ScriptDir "\dictionary.md"
+        if (FileExist(dict_file))
         {
-            prompt .= dict_content
+            try
+            {
+                local dict_full_content := FileRead(dict_file, "UTF-8")
+                prompt .= "**User Dictionary:**`n`n"
+                prompt .= "**Dictionary Structure:**`n"
+                prompt .= "- Lines between `---` are instructions (please skip)`n"
+                prompt .= "- `# Language` marks the target language section`n"
+                prompt .= "- `## Category` is optional categorization`n"
+                prompt .= "- Lines with `Source Translation` format are dictionary entries`n`n"
+                prompt .= "**Dictionary Content:**`n"
+                prompt .= dict_full_content
+                prompt .= "`n`n**Usage:** Find the `# " . target_lang . "` section and use matching entries for translation.`n`n"
+            }
+            catch
+            {
+                ; 词典读取失败，静默继续
+            }
         }
 
         prompt .= "Source text:`n" . text
