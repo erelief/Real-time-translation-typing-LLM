@@ -8,7 +8,6 @@
 
 logger.is_log_open := false  ; 关闭日志
 logger.is_use_editor := true
-logger.level := 4
 
 CoordMode('ToolTip', 'Screen')
 CoordMode('Mouse', 'Screen')
@@ -652,6 +651,14 @@ cleanup_translator()
 main()
 main()
 {
+    ; 测试日志功能
+    try
+    {
+        log_path := A_ScriptDir "\debug.log"
+        timestamp := FormatTime(, "yyyy-MM-dd HH:mm:ss")
+        FileAppend(timestamp " [系统] 脚本启动，测试日志功能`n", log_path, "UTF-8")
+    }
+
     btt('加载中。。。',0, 0,,OwnzztooltipStyle1,{Transparent:180,DistanceBetweenMouseXAndToolTip:-100,DistanceBetweenMouseYAndToolTip:-20})
 
     ; 配置文件路径

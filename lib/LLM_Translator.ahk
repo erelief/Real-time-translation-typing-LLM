@@ -2,6 +2,7 @@
 
 ; ========== 通用OpenAI兼容LLM翻译类 ==========
 ; 支持所有提供OpenAI兼容API的服务
+
 class OpenAI_Compat_LLM
 {
     __New(name, config, callback)
@@ -71,7 +72,6 @@ class OpenAI_Compat_LLM
             if (status != 200)
             {
                 error_msg := "API错误 (HTTP " status "): " response
-                logger.err("[" this.name "] " error_msg)
                 if this.callback
                     this.callback.Call(this.name, "[错误: " error_msg "]")
                 return ""
@@ -83,7 +83,6 @@ class OpenAI_Compat_LLM
             if (!result.Has("choices"))
             {
                 error_msg := "API返回格式错误：缺少choices字段"
-                logger.err("[" this.name "] " error_msg)
                 if this.callback
                     this.callback.Call(this.name, "[错误: " error_msg "]")
                 return ""
@@ -93,7 +92,6 @@ class OpenAI_Compat_LLM
             if (choices.Length == 0)
             {
                 error_msg := "API返回格式错误：choices为空"
-                logger.err("[" this.name "] " error_msg)
                 if this.callback
                     this.callback.Call(this.name, "[错误: " error_msg "]")
                 return ""
@@ -103,7 +101,6 @@ class OpenAI_Compat_LLM
             if (!choice.Has("message") || !choice["message"].Has("content"))
             {
                 error_msg := "API返回格式错误：缺少message.content字段"
-                logger.err("[" this.name "] " error_msg)
                 if this.callback
                     this.callback.Call(this.name, "[错误: " error_msg "]")
                 return ""
@@ -120,8 +117,6 @@ class OpenAI_Compat_LLM
         catch as e
         {
             error_msg := "翻译失败: " e.Message
-            logger.err("[" this.name "] " error_msg)
-            logger.err("[" this.name "] 错误详情: " e.What)
             if this.callback
                 this.callback.Call(this.name, "[错误: " error_msg "]")
             return ""
@@ -135,10 +130,7 @@ class OpenAI_Compat_LLM
 
         ; 检查文件是否存在
         if !FileExist(dict_file)
-        {
-            ; 文件不存在，返回空字符串（不报错）
             return ""
-        }
 
         ; 读取文件
         local file_lines := []
@@ -151,12 +143,12 @@ class OpenAI_Compat_LLM
         }
         catch as e
         {
-            logger.err("读取字典文件失败: " e.Message)
             return ""
         }
 
-        ; 查找目标语言对应的词条（渐进式披露）
+        ; 查找目标语言对应的词条
         local in_target_section := false
+        local in_frontmatter := false
 
         for line in file_lines
         {
@@ -165,28 +157,43 @@ class OpenAI_Compat_LLM
             if (line = "")
                 continue
 
-            ; 检查是否为一级标题（# Language）
+            ; 处理 YAML frontmatter
+            if (SubStr(line, 1, 3) = "---")
+            {
+                in_frontmatter := !in_frontmatter
+                continue
+            }
+
+            ; 如果在 frontmatter 中，跳过该行
+            if (in_frontmatter)
+                continue
+
+            ; 检查是否为一级标题
             if (SubStr(line, 1, 1) = "#")
             {
                 ; 检查是否为一级标题（只有一个 #）
                 local second_char := SubStr(line, 2, 1)
                 if (second_char = " " || second_char = "")
                 {
-                    ; 这是一级标题
-                    local section_lang := Trim(SubStr(line, 2))
-                    if (section_lang = target_lang)
+                    ; 这是一级标题 - 修复：显式移除换行符
+                    local section_lang := SubStr(line, 2)
+                    section_lang := StrReplace(section_lang, "`n", "")
+                    section_lang := StrReplace(section_lang, "`r", "")
+                    section_lang := Trim(section_lang)
+                    local normalized_target := Trim(target_lang)
+                    normalized_target := StrReplace(normalized_target, "`n", "")
+                    normalized_target := StrReplace(normalized_target, "`r", "")
+
+                    if (section_lang = normalized_target)
                     {
-                        ; 找到目标语言标题，开始记录词条
                         in_target_section := true
                     }
                     else if (in_target_section)
                     {
-                        ; 已经在目标语言段落中，遇到其他一级标题则停止
                         break
                     }
                     continue
                 }
-                ; 否则是二级标题（##），在目标段落中继续处理
             }
 
             ; 如果在目标语言段落中，解析词条
@@ -218,12 +225,13 @@ class OpenAI_Compat_LLM
         if (line_count = 0)
             return ""
 
-        ; 格式化为字符串
-        local dict_content := "用户自定义词典（" target_lang "）：`n"
+        ; 格式化为字符串时，添加明确的处理指令（纯英文）
+        local dict_content := "**User Dictionary:** When translating, if you find the following terms in the source text, replace them with their translations first:`n`n"
         for entry in entries
         {
             dict_content .= "  - " entry "`n"
         }
+        dict_content .= "`nAfter replacing terms, translate the text.`n`n"
 
         return dict_content
     }
@@ -231,25 +239,28 @@ class OpenAI_Compat_LLM
     ; 构建翻译提示词
     build_prompt(text, target_lang, persona := "")
     {
+        ; 构建提示词
+        local prompt := ""
+
         ; 如果有个性提示词，添加到翻译指令前面
-        prompt := ""
         if (persona != "")
         {
-            prompt .= persona . ". "
+            prompt .= persona . ".`n`n"
         }
 
-        ; 附加用户字典内容（渐进式披露）
-        local dict_content := this.get_user_dictionary_content(target_lang)
-        if (dict_content != "")
-        {
-            prompt .= dict_content "`n"
-            prompt .= "请优先参考上述词典进行翻译。如果词典中有匹配的词条，请使用词典中的翻译。`n`n"
-        }
-
-        prompt := "Translate the following text to " . target_lang . ". Only output the translated result without any explanation.`n`n"
+        ; 翻译指令
+        prompt .= "Translate the following text to " . target_lang . ". Only output the translated result without any explanation.`n`n"
         prompt .= "Punctuation Rule: Match the source text's ending punctuation style:`n"
         prompt .= "- If source ends with punctuation (。.！!？?，,、), add corresponding punctuation in " . target_lang . "`n"
         prompt .= "- If source has NO ending punctuation, do NOT add any punctuation and do NOT capitalize the first letter`n`n"
+
+        ; 附加用户字典内容（渐进式披露）- 紧邻源文本前
+        local dict_content := this.get_user_dictionary_content(target_lang)
+        if (dict_content != "")
+        {
+            prompt .= dict_content
+        }
+
         prompt .= "Source text:`n" . text
         return prompt
     }
