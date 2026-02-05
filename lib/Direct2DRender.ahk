@@ -97,8 +97,32 @@ class Direct2DRender
 		}
 		DllCall("SetLayeredWindowAttributes","Uptr",hwnd,"Uint",0,"char",255,"uint",2)
 
-    	this.factory := ID2D1Factory()
-		this.wFactory := IDWriteFactory()
+    	; Initialize Direct2D Factory with error handling
+    	try {
+    		this.factory := ID2D1Factory()
+    	} catch Error as err {
+    		this.Err("Direct2DRender: Failed to initialize Direct2D factory", "Please ensure d2d1.dll is available.`n`nError: " err.message)
+    		return
+    	}
+
+    	; Initialize DirectWrite Factory with error handling
+    	try {
+    		this.wFactory := IDWriteFactory()
+    	} catch Error as err {
+    		this.Err("Direct2DRender: Failed to initialize DirectWrite factory", "Please ensure dwrite.dll is available.`n`nError: " err.message)
+    		return
+    	}
+
+    	; Validate factories were created successfully
+    	if (!this.factory || !IsObject(this.factory)) {
+    		this.Err("Direct2DRender: Direct2D factory validation failed", "The factory object is invalid or null.")
+    		return
+    	}
+
+    	if (!this.wFactory || !IsObject(this.wFactory)) {
+    		this.Err("Direct2DRender: DirectWrite factory validation failed", "The factory object is invalid or null.")
+    		return
+    	}
 
 		this.stroke := this.factory.CreateStrokeStyle(D2D1_STROKE_STYLE_PROPERTIES([,,,, 255]), 0, 0)
 		this.strokeRounded := this.factory.CreateStrokeStyle(D2D1_STROKE_STYLE_PROPERTIES([2, 2, 0, 2, 255]), 0, 0)
@@ -387,6 +411,13 @@ class Direct2DRender
 	{
 		p := (this.fonts.Has(fontName size) ? this.fonts[fontName size] : this.CacheFont(fontName,size))
 		p.SetTextAlignment((InStr(extraOptions,"aRight") ? 1 : InStr(extraOptions,"aCenter") ? 2 : 0))
+
+		; Safety check: Ensure wFactory exists and is valid
+		if (!this.wFactory || !IsObject(this.wFactory)) {
+			this.Err("GetTextWidthHeight: DirectWrite factory not available", "The wFactory property is not initialized. Cannot create text layout.`n`nThis usually means DirectWrite initialization failed earlier.")
+			return {width: 0, height: 0}
+		}
+
 		t := this.wFactory.CreateTextLayout(text, p, 5000, 5000)
 		size := t.GetMetrics()
 		return {width : size.width, height : size.height}
@@ -853,8 +884,13 @@ class Direct2DRender
 		bitmap := this.renderTarget.CreateBitmap(size := D2D1_SIZE_U([w, h]), p, 4 * w, props)
 		return this.imageCache[image] := Map("p",bitmap, "w",w, "h",h)
 	}
-	CacheFont(name,size) 
+	CacheFont(name,size)
 	{
+		; Safety check: Ensure wFactory exists and is valid
+		if (!this.wFactory || !IsObject(this.wFactory)) {
+			this.Err("CacheFont: DirectWrite factory not available", "The wFactory property is not initialized. Cannot create font format.`n`nThis usually means DirectWrite initialization failed earlier.")
+			return 0
+		}
 		return this.fonts[name size] := this.wFactory.CreateTextFormat(name, 0, 400, 0, 5, size, 'en-us')
 	}
 	__Delete() 
