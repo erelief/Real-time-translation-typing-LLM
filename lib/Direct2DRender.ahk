@@ -62,6 +62,7 @@ class Direct2DRender
 		this.owned := 0
 		this.lastSize := 0
 		this.alwaysontop := alwaysontop
+		this.renderTarget := 0  ; Initialize to 0 before any early returns
 		pOut := 0
 		
 		this._cacheImage := this.mcode("VVdWMfZTg+wMi0QkLA+vRCQoi1QkMMHgAoXAfmSLTCQki1wkIA+26gHIiUQkCGaQD7Z5A4PDBIPBBIn4D7bwD7ZB/g+vxpn3/YkEJA+2Qf0Pr8aZ9/2JRCQED7ZB/A+vxpn3/Q+2FCSIU/wPtlQkBIhT/YhD/on4iEP/OUwkCHWvg8QMifBbXl9dw5CQkJCQ|V1ZTRTHbRItUJEBFD6/BRo0MhQAAAABFhcl+YUGD6QFFD7bSSYnQQcHpAkqNdIoERQ+2WANBD7ZAAkmDwARIg8EEQQ+vw5lB9/qJx0EPtkD9QQ+vw5lB9/pBicFBD7ZA/ECIefxEiEn9QQ+vw0SIWf+ZQff6iEH+TDnGdbNEidhbXl/DkJCQkJCQkJCQkJCQ")
@@ -156,7 +157,7 @@ class Direct2DRender
 	;									updated to the attached windows position/size
 	;									Could use SetParent but it introduces other issues, I'll explore further later
 	
-	AttachToWindow(title,AttachToClientArea:=0,foreground:=1,setOwner:=0) 
+	AttachToWindow(title,AttachToClientArea:=0,foreground:=1,setOwner:=0)
 	{
 		if (title = "") {
 			this.Err("AttachToWindow: Error","Expected title string, but empty variable was supplied!")
@@ -166,6 +167,13 @@ class Direct2DRender
 			this.Err("AttachToWindow: Error","Could not find window - " title)
 			return 0
 		}
+
+		; Defensive check: renderTarget must be initialized before Resize
+		if (!this.renderTarget) {
+			this.Err("AttachToWindow: Error", "renderTarget is not initialized. Direct2D/DirectWrite initialization may have failed.")
+			return 0
+		}
+
 		numput("Uptr",this.attachHwnd,this.tbufferptr,0)
 		this.attachHWND := numget(this.tbufferptr,0,"Ptr")
 		if (!DllCall("GetWindowRect","Uptr",this.attachHWND,"ptr",this.tBufferPtr)) {
@@ -199,9 +207,16 @@ class Direct2DRender
 	;
 	;Notes				;				Must always call EndDraw to finish drawing and update the overlay
 	
-	BeginDraw() 
+	BeginDraw()
 	{
 		local pOut := 0
+
+		; Defensive check: renderTarget must be initialized
+		if (!this.renderTarget) {
+			this.Err("BeginDraw: Error", "renderTarget is not initialized. Direct2D/DirectWrite initialization may have failed.")
+			return 0
+		}
+
 		if (this.attachHWND) 
 		{
 			if (!DllCall("GetWindowRect","Uptr",this.attachHWND,"ptr",this.tBufferPtr) or (this.attachForeground and DllCall("GetForegroundWindow","cdecl Ptr") != this.attachHWND)) 
@@ -284,6 +299,13 @@ class Direct2DRender
 	EndDraw()
 	{
 		local pOut:=0
+
+		; Defensive check: renderTarget must be initialized
+		if (!this.renderTarget) {
+			this.Err("EndDraw: Error", "renderTarget is not initialized. Direct2D/DirectWrite initialization may have failed.")
+			return 0x88990015  ; Return D2DERR_RECREATE_TARGET error code
+		}
+
 		if (this.drawing)
 		{
 			return this.renderTarget.EndDraw()
@@ -311,8 +333,14 @@ class Direct2DRender
 	;
 	;return				;				Void
 	
-	DrawImage(image,dstX,dstY,dstW:=0,dstH:=0,srcX:=0,srcY:=0,srcW:=0,srcH:=0,alpha:=1,drawCentered:=0,rotation:=0,rotOffX:=0,rotOffY:=0) 
+	DrawImage(image,dstX,dstY,dstW:=0,dstH:=0,srcX:=0,srcY:=0,srcW:=0,srcH:=0,alpha:=1,drawCentered:=0,rotation:=0,rotOffX:=0,rotOffY:=0)
 	{
+		; Defensive check: renderTarget must be initialized
+		if (!this.renderTarget) {
+			this.Err("DrawImage: Error", "renderTarget is not initialized. Direct2D/DirectWrite initialization may have failed.")
+			return
+		}
+
 		i := (this.imageCache.Has(image) ? this.imageCache[image] : this.cacheImage(image))
 		
 		if (dstW <= 0)
@@ -382,9 +410,16 @@ class Direct2DRender
 	;
 	;return				;				Void
 	
-	DrawText(text,x,y,size:=18,color:=0xFFFFFFFF,fontName:="Arial",extraOptions:="") 
+	DrawText(text,x,y,size:=18,color:=0xFFFFFFFF,fontName:="Arial",extraOptions:="")
 	{
 		local w,h,p,ds,dsx,dsy,ol
+
+		; Defensive check: renderTarget must be initialized
+		if (!this.renderTarget) {
+			this.Err("DrawText: Error", "renderTarget is not initialized. Direct2D/DirectWrite initialization may have failed.")
+			return
+		}
+
 		w := (RegExMatch(extraOptions,"w([\d\.]+)",&w) ? w[1] : this.width)
 		h := (RegExMatch(extraOptions,"h([\d\.]+)",&h) ? h[1] : this.height)
 		
@@ -436,8 +471,14 @@ class Direct2DRender
 	;
 	;return				;				Void
 	
-	DrawEllipse(x, y, w, h, color, thickness:=1) 
+	DrawEllipse(x, y, w, h, color, thickness:=1)
 	{
+		; Defensive check: renderTarget must be initialized
+		if (!this.renderTarget) {
+			this.Err("DrawEllipse: Error", "renderTarget is not initialized. Direct2D/DirectWrite initialization may have failed.")
+			return
+		}
+
 		this.SetBrushColor(color)
 		this.renderTarget.DrawEllipse(D2D1_ELLIPSE([D2D1_POINT_2F([x, y]), w, h]), this.brush, thickness, this.stroke)
 	}
@@ -454,8 +495,14 @@ class Direct2DRender
 	;
 	;return				;				Void
 	
-	FillEllipse(x, y, w, h, color) 
+	FillEllipse(x, y, w, h, color)
 	{
+		; Defensive check: renderTarget must be initialized
+		if (!this.renderTarget) {
+			this.Err("FillEllipse: Error", "renderTarget is not initialized. Direct2D/DirectWrite initialization may have failed.")
+			return
+		}
+
 		this.SetBrushColor(color)
 		this.renderTarget.FillEllipse(D2D1_ELLIPSE([D2D1_POINT_2F([x, y]), w, h]), this.brush)
 	}
@@ -472,8 +519,14 @@ class Direct2DRender
 	;
 	;return				;				Void
 	
-	DrawCircle(x, y, radius, color, thickness:=1) 
+	DrawCircle(x, y, radius, color, thickness:=1)
 	{
+		; Defensive check: renderTarget must be initialized
+		if (!this.renderTarget) {
+			this.Err("DrawCircle: Error", "renderTarget is not initialized. Direct2D/DirectWrite initialization may have failed.")
+			return
+		}
+
 		this.SetBrushColor(color)
 		this.renderTarget.DrawEllipse(D2D1_ELLIPSE([D2D1_POINT_2F([x, y]), radius, radius]), this.brush, thickness, this.stroke)
 	}
@@ -489,8 +542,14 @@ class Direct2DRender
 	;
 	;return				;				Void
 	
-	FillCircle(x, y, radius, color) 
+	FillCircle(x, y, radius, color)
 	{
+		; Defensive check: renderTarget must be initialized
+		if (!this.renderTarget) {
+			this.Err("FillCircle: Error", "renderTarget is not initialized. Direct2D/DirectWrite initialization may have failed.")
+			return
+		}
+
 		this.SetBrushColor(color)
 		this.renderTarget.FillEllipse(D2D1_ELLIPSE([D2D1_POINT_2F([x, y]), radius, radius]), this.brush)
 	}
@@ -508,8 +567,14 @@ class Direct2DRender
 	;
 	;return				;				Void
 	
-	DrawRectangle(x, y, w, h, color, thickness:=1) 
+	DrawRectangle(x, y, w, h, color, thickness:=1)
 	{
+		; Defensive check: renderTarget must be initialized
+		if (!this.renderTarget) {
+			this.Err("DrawRectangle: Error", "renderTarget is not initialized. Direct2D/DirectWrite initialization may have failed.")
+			return
+		}
+
 		this.SetBrushColor(color)
 		this.renderTarget.DrawRectangle(D2D1_RECT_F([x, y, x+w, y+h]), this.brush, thickness, this.stroke)
 	}
@@ -526,8 +591,14 @@ class Direct2DRender
 	;
 	;return				;				Void
 	
-	FillRectangle(x, y, w, h, color) 
+	FillRectangle(x, y, w, h, color)
 	{
+		; Defensive check: renderTarget must be initialized
+		if (!this.renderTarget) {
+			this.Err("FillRectangle: Error", "renderTarget is not initialized. Direct2D/DirectWrite initialization may have failed.")
+			return
+		}
+
 		this.SetBrushColor(color)
         this.renderTarget.FillRectangle(D2D1_RECT_F([x, y, x + w, y + h]), this.brush)
 	}
@@ -547,8 +618,14 @@ class Direct2DRender
 	;
 	;return				;				Void
 	
-	DrawRoundedRectangle(x, y, w, h, radiusX, radiusY, color, thickness:=1) 
+	DrawRoundedRectangle(x, y, w, h, radiusX, radiusY, color, thickness:=1)
 	{
+		; Defensive check: renderTarget must be initialized
+		if (!this.renderTarget) {
+			this.Err("DrawRoundedRectangle: Error", "renderTarget is not initialized. Direct2D/DirectWrite initialization may have failed.")
+			return
+		}
+
 		this.SetBrushColor(color)
 		this.renderTarget.DrawRoundedRectangle(D2D1_ROUNDED_RECT([D2D1_RECT_F([x, y, x + w, y + h]), radiusX, radiusY]), this.brush, thickness, this.stroke)
 	}
@@ -567,8 +644,14 @@ class Direct2DRender
 	;
 	;return				;				Void
 	
-	FillRoundedRectangle(x, y, w, h, radiusX, radiusY, color) 
+	FillRoundedRectangle(x, y, w, h, radiusX, radiusY, color)
 	{
+		; Defensive check: renderTarget must be initialized
+		if (!this.renderTarget) {
+			this.Err("FillRoundedRectangle: Error", "renderTarget is not initialized. Direct2D/DirectWrite initialization may have failed.")
+			return
+		}
+
 		this.SetBrushColor(color)
 		this.renderTarget.FillRoundedRectangle(D2D1_ROUNDED_RECT([D2D1_RECT_F([x, y, x + w, y + h]), radiusX, radiusY]) , this.brush)
 	}
@@ -586,11 +669,17 @@ class Direct2DRender
 	;
 	;return				;				Void
 
-	DrawLine(x1,y1,x2,y2,color:=0xFFFFFFFF,thickness:=1,rounded:=0) 
+	DrawLine(x1,y1,x2,y2,color:=0xFFFFFFFF,thickness:=1,rounded:=0)
 	{
+		; Defensive check: renderTarget must be initialized
+		if (!this.renderTarget) {
+			this.Err("DrawLine: Error", "renderTarget is not initialized. Direct2D/DirectWrite initialization may have failed.")
+			return
+		}
+
 		this.SetBrushColor(color)
 		this.renderTarget.DrawLine(D2D1_POINT_2F([x1, y1]), D2D1_POINT_2F([x2, y2]), this.brush, thickness, (rounded?this.strokeRounded:this.stroke))
-		
+
 	}
 	
 	
@@ -604,8 +693,14 @@ class Direct2DRender
 	;
 	;return				;				1 on success; 0 otherwise
 
-	DrawLines(points,color,connect:=0,thickness:=1,rounded:=0) 
+	DrawLines(points,color,connect:=0,thickness:=1,rounded:=0)
 	{
+		; Defensive check: renderTarget must be initialized
+		if (!this.renderTarget) {
+			this.Err("DrawLines: Error", "renderTarget is not initialized. Direct2D/DirectWrite initialization may have failed.")
+			return 0
+		}
+
 		if (points.length < 2)
 			return 0
 		lx := sx := points[1][1]
@@ -636,8 +731,14 @@ class Direct2DRender
 	;
 	;return				;				1 on success; 0 otherwise
 
-	DrawPolygon(points,color,thickness:=1,rounded:=0,xOffset:=0,yOffset:=0) 
+	DrawPolygon(points,color,thickness:=1,rounded:=0,xOffset:=0,yOffset:=0)
 	{
+		; Defensive check: renderTarget must be initialized
+		if (!this.renderTarget) {
+			this.Err("DrawPolygon: Error", "renderTarget is not initialized. Direct2D/DirectWrite initialization may have failed.")
+			return 0
+		}
+
 		if (points.length < 3)
 			return 0
 		pGeom := sink := 0
@@ -666,8 +767,14 @@ class Direct2DRender
 	;
 	;return				;				1 on success; 0 otherwise
 
-	FillPolygon(points,color,xoffset:=0,yoffset:=0) 
+	FillPolygon(points,color,xoffset:=0,yoffset:=0)
 	{
+		; Defensive check: renderTarget must be initialized
+		if (!this.renderTarget) {
+			this.Err("FillPolygon: Error", "renderTarget is not initialized. Direct2D/DirectWrite initialization may have failed.")
+			return 0
+		}
+
 		if (points.length < 3)
 			return 0
 		pGeom := sink := 0
@@ -697,15 +804,20 @@ class Direct2DRender
 	;
 	;notes				:				Only used when not attached to a window
 	
-	SetPosition(x,y,w:=0,h:=0) 
+	SetPosition(x,y,w:=0,h:=0)
 	{
 		this.x := x
 		this.y := y
-		if (!this.attachHWND and w != 0 and h != 0) 
+		if (!this.attachHWND and w != 0 and h != 0)
 		{
+			; Defensive check: renderTarget must be initialized before Resize
+			if (!this.renderTarget) {
+				this.Err("SetPosition: Error", "renderTarget is not initialized. Direct2D/DirectWrite initialization may have failed.")
+				return
+			}
 			this.renderTarget.Resize(D2D1_SIZE_U([this.width := w, this.height := h]))
 		}
-		DllCall("MoveWindow","Uptr",this.hwnd,"int",x,"int",y,"int",this.width,"int",this.height,"char",1)
+			DllCall("MoveWindow","Uptr",this.hwnd,"int",x,"int",y,"int",this.width,"int",this.height,"char",1)
 	}
 	
 	
@@ -758,8 +870,14 @@ class Direct2DRender
 	;
 	;notes						:			Clears the overlay, essentially the same as running BegindDraw followed by EndDraw
 	
-	Clear() 
+	Clear()
 	{
+		; Defensive check: renderTarget must be initialized
+		if (!this.renderTarget) {
+			this.Err("Clear: Error", "renderTarget is not initialized. Direct2D/DirectWrite initialization may have failed.")
+			return
+		}
+
 		this.renderTarget.BeginDraw()
 		this.renderTarget.Clear(this.clrPtr)
 		this.renderTarget.EndDraw()
@@ -804,13 +922,23 @@ class Direct2DRender
 		NumPut("float", 0, this.matrixPtr, o+16)
 		NumPut("float", 0, this.matrixPtr, o+20)
 	}
-	DrawTextShadow(p,text,x,y,w,h,color) 
+	DrawTextShadow(p,text,x,y,w,h,color)
 	{
+		; Defensive check: renderTarget must be initialized
+		if (!this.renderTarget) {
+			return
+		}
+
 		this.SetBrushColor(color)
 		this.renderTarget.DrawText(text, p, D2D1_RECT_F([x, y, x + w, y + h]), this.brush, 0, 0)
 	}
-	DrawTextOutline(p,text,x,y,w,h,color) 
+	DrawTextOutline(p,text,x,y,w,h,color)
 	{
+		; Defensive check: renderTarget must be initialized
+		if (!this.renderTarget) {
+			return
+		}
+
 		static o := [[1,0],[1,1],[0,1],[-1,1],[-1,0],[-1,-1],[0,-1],[1,-1]]
 		this.SetBrushColor(color)
 		for k,v in o
@@ -854,7 +982,7 @@ class Direct2DRender
 		clsid := buffer(16,0)
 		DllCall("ole32\CLSIDFromString", "WStr", guidStr, "Ptr", clsid)
 	}
-	CacheImage(image) 
+	CacheImage(image)
 	{
 		if (this.imageCache.has(image))
 			return 1
@@ -866,6 +994,13 @@ class Direct2DRender
 			this.Err("Error finding resource image","'" image "' does not exist!")
 			return 0
 		}
+
+		; Defensive check: renderTarget must be initialized
+		if (!this.renderTarget) {
+			this.Err("CacheImage: Error", "renderTarget is not initialized. Direct2D/DirectWrite initialization may have failed.")
+			return 0
+		}
+
 		w := h := bm := bitmap := 0
 		DllCall("gdiplus\GdipCreateBitmapFromFile", "Str", image, "Ptr*", &bm)
 		DllCall("gdiplus\GdipGetImageWidth", "Ptr", bm, "Uint*", &w)
